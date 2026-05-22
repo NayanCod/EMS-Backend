@@ -1,0 +1,32 @@
+{
+  "name": "emp-backend",
+  "version": "1.0.0",
+  "main": "/dist/app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:ts": "tsc",
+    "build": "yarn tsc -p tsconfig.json && cp .env.production dist/.env && cp package.json dist/package.json && cp -r src/public dist/",
+    "start": "npm run build:ts && fastify start -l info dist/app.js",
+    "dev": "tsc && concurrently -k -p \"[{name}]\" -n \"TypeScript,App\" -c \"yellow.bold,cyan.bold\" \"tsc -w\" \"fastify start --ignore-watch=.ts$ -w -l info -P dist/app.js\"",
+    "prod-run": "tsc && fastify start -l error dist/app.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/autoload": "^6.3.1",
+    "@fastify/cors": "^11.2.0",
+    "@fastify/env": "^6.0.0",
+    "@fastify/mongodb": "^10.0.0",
+    "@fastify/redis": "^7.2.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.8.5",
+    "fastify-plugin": "^5.1.0",
+    "mongoose": "^9.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "concurrently": "^9.2.1",
+    "fastify-cli": "^8.0.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules
+# Keep environment variables out of version control
+
+firebase-config.json
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.development
+.env.test
+.env.production
+.env.local
+.env.development.local
+
+dist
+build
