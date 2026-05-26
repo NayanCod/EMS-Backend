@@ -27,4 +27,4 @@ const server: FastifyPluginAsync<AppOptions> = async (
   });
 };
 
-export default server;
+export default server; // Trigger restart
