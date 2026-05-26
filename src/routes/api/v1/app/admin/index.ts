@@ -11,7 +11,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
   fastify.post('/employee', async (request, reply) => {
     const admin = request.user as any;
-    const { name, email, password, phoneNumber } = request.body as any;
+    const { name, email, password, phoneNumber, designation } = request.body as any;
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
@@ -19,16 +19,17 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       phoneNumber,
       password: hashedPassword,
       role: 'EMPLOYEE',
+      designation,
       organizationId: admin.organizationId
     });
     await user.save();
-    return reply.created({ message: 'Employee created', user: { id: user._id, name, email, phoneNumber, organizationId: user.organizationId } });
+    return reply.created({ message: 'Employee created', user: { id: user._id, name, email, phoneNumber, designation, organizationId: user.organizationId } });
   });
 
   fastify.put('/employee/:id', async (request, reply) => {
     const admin = request.user as any;
     const { id } = request.params as { id: string };
-    const { name, email, phoneNumber, password } = request.body as any;
+    const { name, email, phoneNumber, password, designation } = request.body as any;
 
     const user = await User.findOne({ _id: id, organizationId: admin.organizationId });
     if (!user) return reply.notFound('Employee not found');
@@ -37,6 +38,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     if (email) user.email = email;
     if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
     if (password) user.password = await bcrypt.hash(password, 10);
+    if (designation) user.designation = designation;
 
     await user.save();
     return reply.ok({ message: 'Employee updated successfully' });

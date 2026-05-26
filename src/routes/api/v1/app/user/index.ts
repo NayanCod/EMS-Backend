@@ -16,8 +16,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
   fastify.put('/', async (request, reply) => {
     const reqUser = request.user as any;
-    const { name, email, phoneNumber, password } = request.body as any;
-    
+    const { name, email, phoneNumber, password, designation } = request.body as any;
+
     const user = await User.findById(reqUser.id);
     if (!user) {
       return reply.notFound('User not found');
@@ -29,14 +29,18 @@ export default async function userRoutes(fastify: FastifyInstance) {
     if (password) {
       user.password = await bcrypt.hash(password, 10);
     }
+    if (designation) user.designation = designation;
 
     await user.save();
-    return reply.ok({ message: 'Profile updated successfully', user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      role: user.role
-    }});
+    return reply.ok({
+      message: 'Profile updated successfully', user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+        designation: user.designation
+      }
+    });
   });
 }
