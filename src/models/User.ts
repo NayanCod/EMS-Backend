@@ -6,7 +6,7 @@ export interface IUser extends Document {
   phoneNumber?: string;
   password?: string;
   role: 'EMPLOYEE' | 'ADMIN';
-  designation: string;
+  designation?: string;
   organizationId: mongoose.Types.ObjectId;
 }
 
@@ -23,7 +23,7 @@ const UserSchema: Schema = new Schema({
   phoneNumber: { type: String, trim: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['EMPLOYEE', 'ADMIN'], default: 'EMPLOYEE' },
-  designation: { type: String, required: true },
+  designation: { type: String },
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
 }, {
   timestamps: true,

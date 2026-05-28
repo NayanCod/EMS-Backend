@@ -10,6 +10,7 @@ export interface IOrganization extends Document {
   radius?: number;
   workStartTime?: string;
   workEndTime?: string;
+  orgCode: string;
 }
 
 const OrganizationSchema: Schema = new Schema({
@@ -22,6 +23,7 @@ const OrganizationSchema: Schema = new Schema({
   radius: { type: Number, default: 500 },
   workStartTime: { type: String },
   workEndTime: { type: String },
+  orgCode: { type: String, required: true, unique: true },
 }, {
   timestamps: true,
 });
