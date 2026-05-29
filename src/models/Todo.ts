@@ -5,6 +5,8 @@ export interface ITodo extends Document {
   task: string;
   status: 'pending' | 'completed';
   date: string;
+  projectId?: mongoose.Types.ObjectId;
+  assignedBy?: mongoose.Types.ObjectId;
 }
 
 const TodoSchema: Schema = new Schema({
@@ -16,6 +18,8 @@ const TodoSchema: Schema = new Schema({
     required: true,
     match: [/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format']
   },
+  projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
+  assignedBy: { type: Schema.Types.ObjectId, ref: 'User' },
 }, {
   timestamps: true,
 });
