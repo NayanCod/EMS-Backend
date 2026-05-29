@@ -107,6 +107,31 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     return reply.ok({ user, attendance, tasks });
   });
 
+  fastify.get('/employee/:id/contribution', async (request, reply) => {
+    const admin = request.user as any;
+    const { id } = request.params as any;
+
+    // Check organization membership first
+    const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('_id');
+    if (!user) {
+      return reply.notFound('Employee not found in your organization');
+    }
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const monthPrefix = `${year}-${month}-`;
+
+    const records = await Attendance.find({
+      userId: id,
+      date: { $regex: new RegExp('^' + monthPrefix) }
+    })
+      .select('date checkInTime checkOutTime')
+      .lean();
+
+    return reply.ok({ records });
+  });
+
   fastify.get('/organization', async (request, reply) => {
     const admin = request.user as any;
     const organization = await Organization.findById(admin.organizationId);

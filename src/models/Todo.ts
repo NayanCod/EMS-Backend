@@ -7,6 +7,9 @@ export interface ITodo extends Document {
   date: string;
   projectId?: mongoose.Types.ObjectId;
   assignedBy?: mongoose.Types.ObjectId;
+  completedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const TodoSchema: Schema = new Schema({
@@ -20,6 +23,7 @@ const TodoSchema: Schema = new Schema({
   },
   projectId: { type: Schema.Types.ObjectId, ref: 'Project' },
   assignedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  completedAt: { type: Date },
 }, {
   timestamps: true,
 });

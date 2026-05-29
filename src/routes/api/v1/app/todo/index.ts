@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Todo } from '../../../../../models/Todo';
+import { Notification } from '../../../../../models/Notification';
 
 export default async function todoRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -12,39 +13,70 @@ export default async function todoRoutes(fastify: FastifyInstance) {
       return reply.badRequest('MISSING_FIELDS', 'Task and date are required');
     }
 
-    let targetUserId = user.id;
-    let assignedBy = undefined;
+    const assignees = Array.isArray(assignedTo)
+      ? assignedTo
+      : (assignedTo ? [assignedTo] : [user.id]);
 
-    // If an Admin or someone else assigns the task to a specific user
-    if (assignedTo && assignedTo !== user.id) {
-      targetUserId = assignedTo;
-      assignedBy = user.id;
-      // TODO: FUTURE INTEGRATION - send push notification to targetUserId here
+    const createdTodos = [];
+    for (const targetUserId of assignees) {
+      let assignedBy = undefined;
+      if (targetUserId !== user.id) {
+        assignedBy = user.id;
+      }
+
+      const todo = new Todo({
+        userId: targetUserId,
+        task,
+        date,
+        projectId: projectId || undefined,
+        assignedBy
+      });
+
+      await todo.save();
+      createdTodos.push(todo);
+
+      // Notification Trigger if assigned by someone else
+      if (assignedBy) {
+        const notification = new Notification({
+          userId: targetUserId,
+          title: 'New Task Assigned',
+          message: `You have been assigned a new task: "${task}"`
+        });
+        await notification.save();
+      }
     }
 
-    const todo = new Todo({
-      userId: targetUserId,
-      task,
-      date,
-      projectId,
-      assignedBy
-    });
-
-    await todo.save();
-    return reply.created({ message: 'Todo created', todo });
+    return reply.created({ message: 'Todo(s) created successfully', todos: createdTodos });
   });
 
   fastify.patch('/:id', async (request, reply) => {
     const user = request.user as any;
     const { id } = request.params as any;
-    const { status } = request.body as any;
+    const { status, projectId } = request.body as any;
 
     const todo = await Todo.findOne({ _id: id, userId: user.id });
     if (!todo) {
       return reply.notFound('Todo not found');
     }
 
-    if (status) todo.status = status;
+    // Check restriction: Employee cannot move todo to project if assigned by admin
+    if (projectId !== undefined && todo.assignedBy) {
+      return reply.forbidden('403', 'Forbidden: Cannot move admin-assigned tasks to a project');
+    }
+
+    if (projectId !== undefined) {
+      todo.projectId = projectId === null ? undefined : projectId;
+    }
+
+    if (status) {
+      todo.status = status;
+      if (status === 'completed') {
+        todo.completedAt = new Date();
+      } else {
+        todo.completedAt = undefined;
+      }
+    }
+
     await todo.save();
 
     return reply.ok({ message: 'Todo updated', todo });

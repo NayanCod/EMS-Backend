@@ -80,6 +80,24 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     return reply.ok({ records });
   });
 
+  // GET /contribution — highly optimized attendance for contribution graph (current month)
+  fastify.get('/contribution', async (request, reply) => {
+    const user = request.user as any;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const monthPrefix = `${year}-${month}-`;
+
+    const records = await Attendance.find({
+      userId: user.id,
+      date: { $regex: new RegExp('^' + monthPrefix) }
+    })
+      .select('date checkInTime checkOutTime')
+      .lean();
+
+    return reply.ok({ records });
+  });
+
   // GET /stats — weekly working hours, punctuality, and org start time
   fastify.get('/stats', async (request, reply) => {
     const user = request.user as any;
