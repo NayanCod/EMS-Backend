@@ -88,4 +88,28 @@ export default async function userRoutes(fastify: FastifyInstance) {
       }
     });
   });
+
+  fastify.post('/change-password', async (request, reply) => {
+    const reqUser = request.user as any;
+    const { currentPassword, newPassword } = request.body as any;
+
+    if (!currentPassword || !newPassword) {
+      return reply.badRequest('400', 'Current password and new password are required');
+    }
+
+    const user = await User.findById(reqUser.id);
+    if (!user) {
+      return reply.notFound('User not found');
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password!);
+    if (!isValid) {
+      return reply.badRequest('400', 'Incorrect current password');
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return reply.ok({ message: 'Password updated successfully' });
+  });
 }

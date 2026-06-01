@@ -7,7 +7,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/login', async (request, reply) => {
     const { email, password } = request.body as any;
 
-    const user = await User.findOne({ email }).populate('organizationId');
+    const user = await User.findOne({ email, status: { $ne: 'REMOVED' } }).populate('organizationId');
     if (!user) {
       return reply.unauthorised();
     }
