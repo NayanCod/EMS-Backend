@@ -8,6 +8,10 @@ export interface IUser extends Document {
   role: 'EMPLOYEE' | 'ADMIN';
   designation?: string;
   organizationId: mongoose.Types.ObjectId;
+  employeeId?: string;
+  department?: string;
+  emailNotificationsEnabled: boolean;
+  appNotificationsEnabled: boolean;
 }
 
 const UserSchema: Schema = new Schema({
@@ -25,6 +29,10 @@ const UserSchema: Schema = new Schema({
   role: { type: String, enum: ['EMPLOYEE', 'ADMIN'], default: 'EMPLOYEE' },
   designation: { type: String },
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', required: true },
+  employeeId: { type: String, trim: true },
+  department: { type: String, trim: true },
+  emailNotificationsEnabled: { type: Boolean, default: true },
+  appNotificationsEnabled: { type: Boolean, default: true },
 }, {
   timestamps: true,
 });

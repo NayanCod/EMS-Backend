@@ -2,6 +2,45 @@ import { FastifyInstance } from 'fastify';
 import { Project } from '../../../../../models/Project';
 import { User } from '../../../../../models/User';
 import { Todo } from '../../../../../models/Todo';
+import { Notification } from '../../../../../models/Notification';
+import { sendMail } from '../../../../../services/emailService';
+import { getProjectAssignedTemplate } from '../../../../../utils/emailTemplates';
+
+async function notifyNewMembers(
+  newMemberIds: string[],
+  adminName: string,
+  projectName: string,
+  projectDesc: string | undefined,
+  dueDate: string | undefined
+) {
+  if (newMemberIds.length === 0) return;
+
+  const members = await User.find({ _id: { $in: newMemberIds } })
+    .select('name email emailNotificationsEnabled appNotificationsEnabled')
+    .lean();
+
+  for (const member of members) {
+    // In-app notification
+    if (member.appNotificationsEnabled !== false) {
+      const notification = new Notification({
+        userId: member._id,
+        title: 'Added to Project',
+        message: `You have been added to project: "${projectName}" by ${adminName}`,
+      });
+      await notification.save();
+    }
+
+    // Email notification
+    if (member.emailNotificationsEnabled !== false && member.email) {
+      const html = getProjectAssignedTemplate(member.name, adminName, projectName, projectDesc, dueDate);
+      sendMail({
+        to: member.email,
+        subject: `You've been added to project: "${projectName}"`,
+        html,
+      });
+    }
+  }
+}
 
 export default async function projectRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -24,6 +63,13 @@ export default async function projectRoutes(fastify: FastifyInstance) {
     });
 
     await project.save();
+
+    // Notify newly added members (exclude the creator)
+    const creatorUser = await User.findById(user.id).select('name').lean();
+    const adminName = creatorUser?.name || 'Admin';
+    const newMemberIds = (members || []).filter((m: string) => m !== user.id);
+    await notifyNewMembers(newMemberIds, adminName, name, description, dueDate);
+
     return reply.created({ message: 'Project created', project });
   });
 
@@ -77,12 +123,26 @@ export default async function projectRoutes(fastify: FastifyInstance) {
       return reply.forbidden('403', 'Only admin or project creator can update the project');
     }
 
+    // Determine newly added members before updating
+    const previousMemberIds = project.members.map(m => m.toString());
+
     if (name) project.name = name;
     if (description !== undefined) project.description = description;
     if (dueDate !== undefined) project.dueDate = dueDate;
     if (members) project.members = members;
 
     await project.save();
+
+    // Notify only the newly added members
+    if (members) {
+      const newMemberIds = members.filter((m: string) => !previousMemberIds.includes(m) && m !== user.id);
+      if (newMemberIds.length > 0) {
+        const creatorUser = await User.findById(user.id).select('name').lean();
+        const adminName = creatorUser?.name || 'Admin';
+        await notifyNewMembers(newMemberIds, adminName, project.name, project.description, project.dueDate);
+      }
+    }
+
     return reply.ok({ message: 'Project updated', project });
   });
 }

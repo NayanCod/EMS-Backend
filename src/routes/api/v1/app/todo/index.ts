@@ -1,6 +1,9 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Todo } from '../../../../../models/Todo';
 import { Notification } from '../../../../../models/Notification';
+import { User } from '../../../../../models/User';
+import { sendMail } from '../../../../../services/emailService';
+import { getTaskAssignedTemplate } from '../../../../../utils/emailTemplates';
 
 export default async function todoRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -16,6 +19,10 @@ export default async function todoRoutes(fastify: FastifyInstance) {
     const assignees = Array.isArray(assignedTo)
       ? assignedTo
       : (assignedTo ? [assignedTo] : [user.id]);
+
+    // Fetch assigner's name for notification/email
+    const assigner = await User.findById(user.id).select('name').lean();
+    const assignerName = assigner?.name || 'Admin';
 
     const createdTodos = [];
     for (const targetUserId of assignees) {
@@ -35,14 +42,29 @@ export default async function todoRoutes(fastify: FastifyInstance) {
       await todo.save();
       createdTodos.push(todo);
 
-      // Notification Trigger if assigned by someone else
+      // Notification & Email Trigger if assigned by someone else
       if (assignedBy) {
-        const notification = new Notification({
-          userId: targetUserId,
-          title: 'New Task Assigned',
-          message: `You have been assigned a new task: "${task}"`
-        });
-        await notification.save();
+        const targetUser = await User.findById(targetUserId).select('name email emailNotificationsEnabled appNotificationsEnabled').lean();
+
+        // In-app notification (if enabled)
+        if (targetUser?.appNotificationsEnabled !== false) {
+          const notification = new Notification({
+            userId: targetUserId,
+            title: 'New Task Assigned',
+            message: `You have been assigned a new task: "${task}"`
+          });
+          await notification.save();
+        }
+
+        // Email notification (if enabled)
+        if (targetUser?.emailNotificationsEnabled !== false && targetUser?.email) {
+          const html = getTaskAssignedTemplate(targetUser.name, assignerName, task);
+          sendMail({
+            to: targetUser.email,
+            subject: `New Task Assigned: "${task}"`,
+            html,
+          });
+        }
       }
     }
 

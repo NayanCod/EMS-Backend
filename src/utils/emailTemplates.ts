@@ -1,0 +1,269 @@
+export interface IEmployeeDailyRecord {
+  name: string;
+  status: 'Present' | 'Absent';
+  checkIn: string;
+  checkOut: string;
+  completedTasks: string[];
+  pendingTasks: string[];
+}
+
+export interface IEmployeeMonthlyRecord {
+  name: string;
+  presentDays: number;
+  totalDays: number;
+  attendanceRate: number;
+  completedTasksCount: number;
+  pendingTasksCount: number;
+}
+
+const emailHeaderStyle = `
+  background-color: #208AEF;
+  color: #ffffff;
+  padding: 24px;
+  text-align: center;
+  border-radius: 8px 8px 0 0;
+`;
+
+const emailContainerStyle = `
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  max-width: 600px;
+  margin: 0 auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #333333;
+`;
+
+const emailBodyStyle = `
+  padding: 24px;
+  line-height: 1.6;
+`;
+
+const buttonStyle = `
+  display: inline-block;
+  background-color: #208AEF;
+  color: #ffffff;
+  padding: 12px 24px;
+  text-decoration: none;
+  border-radius: 25px;
+  font-weight: bold;
+  margin: 8px 4px;
+  text-align: center;
+`;
+
+const secondaryButtonStyle = `
+  display: inline-block;
+  background-color: #f0f0f0;
+  color: #333333;
+  padding: 12px 24px;
+  text-decoration: none;
+  border-radius: 25px;
+  font-weight: bold;
+  margin: 8px 4px;
+  text-align: center;
+`;
+
+const footerStyle = `
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #888888;
+  border-top: 1px solid #eeeeee;
+  background-color: #fafafa;
+  border-radius: 0 0 8px 8px;
+`;
+
+const tableStyle = `
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+`;
+
+const thStyle = `
+  background-color: #f5f5f5;
+  border: 1px solid #dddddd;
+  text-align: left;
+  padding: 8px;
+  font-weight: 600;
+`;
+
+const tdStyle = `
+  border: 1px solid #dddddd;
+  text-align: left;
+  padding: 8px;
+`;
+
+export function getTaskAssignedTemplate(employeeName: string, adminName: string, taskTitle: string): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 24px;">New Task Assigned</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${employeeName}</strong>,</p>
+        <p>You have been assigned a new task by <strong>${adminName}</strong>:</p>
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0; font-size: 16px; font-weight: 600;">
+          "${taskTitle}"
+        </div>
+        <p>Click the buttons below to open the app and start working on it:</p>
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://tasks" style="${buttonStyle}">Open My Tasks</a>
+          <a href="empapp://home" style="${secondaryButtonStyle}">Go to Dashboard</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification. Please do not reply directly to this email.
+      </div>
+    </div>
+  `;
+}
+
+export function getProjectAssignedTemplate(
+  employeeName: string,
+  adminName: string,
+  projectName: string,
+  projectDesc: string | undefined,
+  dueDate: string | undefined
+): string {
+  const descHtml = projectDesc ? `<p><strong>Description:</strong> ${projectDesc}</p>` : '';
+  const dateHtml = dueDate ? `<p><strong>Due Date:</strong> ${dueDate}</p>` : '';
+
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 24px;">Added to Project</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${employeeName}</strong>,</p>
+        <p>You have been added to a new project: <strong>${projectName}</strong> by <strong>${adminName}</strong>.</p>
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0;">
+          <p style="margin-top: 0; font-weight: 600; font-size: 16px;">Project Details:</p>
+          ${descHtml}
+          ${dateHtml}
+        </div>
+        <p>Click the buttons below to view the project details in the app:</p>
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://projects" style="${buttonStyle}">Open Projects</a>
+          <a href="empapp://home" style="${secondaryButtonStyle}">Go to Dashboard</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification. Please do not reply directly to this email.
+      </div>
+    </div>
+  `;
+}
+
+export function getDailyReportTemplate(date: string, orgName: string, records: IEmployeeDailyRecord[]): string {
+  let tableRowsHtml = '';
+  
+  if (records.length === 0) {
+    tableRowsHtml = `<tr><td colspan="4" style="${tdStyle} text-align: center; color: #888888;">No employees in organization.</td></tr>`;
+  } else {
+    for (const rec of records) {
+      const completedList = rec.completedTasks.length > 0 
+        ? `<ul style="margin: 0; padding-left: 16px;">${rec.completedTasks.map(t => `<li>${t}</li>`).join('')}</ul>`
+        : '<span style="color: #888888; font-size: 12px;">None</span>';
+
+      const pendingList = rec.pendingTasks.length > 0 
+        ? `<ul style="margin: 0; padding-left: 16px;">${rec.pendingTasks.map(t => `<li>${t}</li>`).join('')}</ul>`
+        : '<span style="color: #888888; font-size: 12px;">None</span>';
+
+      const attendanceStatus = rec.status === 'Present'
+        ? `<span style="color: #2e7d32; font-weight: bold;">Present</span><br/><span style="font-size: 11px; color: #666666;">In: ${rec.checkIn}<br/>Out: ${rec.checkOut}</span>`
+        : `<span style="color: #c62828; font-weight: bold;">Absent</span>`;
+
+      tableRowsHtml += `
+        <tr>
+          <td style="${tdStyle}"><strong>${rec.name}</strong></td>
+          <td style="${tdStyle}">${attendanceStatus}</td>
+          <td style="${tdStyle}">${completedList}</td>
+          <td style="${tdStyle}">${pendingList}</td>
+        </tr>
+      `;
+    }
+  }
+
+  return `
+    <div style="${emailContainerStyle}; max-width: 700px;">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 22px;">Daily Performance Report</h1>
+        <p style="margin: 4px 0 0 0; font-size: 14px;">${orgName} • ${date}</p>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi Admin,</p>
+        <p>Here is the daily summary report of your employees for yesterday (<strong>${date}</strong>):</p>
+        
+        <table style="${tableStyle}">
+          <thead>
+            <tr>
+              <th style="${thStyle}; width: 25%;">Employee</th>
+              <th style="${thStyle}; width: 25%;">Attendance</th>
+              <th style="${thStyle}; width: 25%;">Completed Tasks</th>
+              <th style="${thStyle}; width: 25%;">Pending Tasks</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+      </div>
+      <div style="${footerStyle}">
+        This report is generated automatically by your employee tracking app.
+      </div>
+    </div>
+  `;
+}
+
+export function getMonthlyReportTemplate(monthName: string, orgName: string, records: IEmployeeMonthlyRecord[]): string {
+  let tableRowsHtml = '';
+
+  if (records.length === 0) {
+    tableRowsHtml = `<tr><td colspan="4" style="${tdStyle} text-align: center; color: #888888;">No employees in organization.</td></tr>`;
+  } else {
+    for (const rec of records) {
+      tableRowsHtml += `
+        <tr>
+          <td style="${tdStyle}"><strong>${rec.name}</strong></td>
+          <td style="${tdStyle}">
+            <strong>${rec.attendanceRate}%</strong>
+            <br/>
+            <span style="font-size: 11px; color: #666666;">Present: ${rec.presentDays}/${rec.totalDays} days</span>
+          </td>
+          <td style="${tdStyle}; color: #2e7d32; font-weight: bold;">${rec.completedTasksCount}</td>
+          <td style="${tdStyle}; color: #e65100; font-weight: bold;">${rec.pendingTasksCount}</td>
+        </tr>
+      `;
+    }
+  }
+
+  return `
+    <div style="${emailContainerStyle}; max-width: 700px;">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 22px;">Monthly Summary Report</h1>
+        <p style="margin: 4px 0 0 0; font-size: 14px;">${orgName} • ${monthName}</p>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi Admin,</p>
+        <p>Here is the monthly performance summary of your employees for the month of <strong>${monthName}</strong>:</p>
+        
+        <table style="${tableStyle}">
+          <thead>
+            <tr>
+              <th style="${thStyle}; width: 30%;">Employee</th>
+              <th style="${thStyle}; width: 30%;">Monthly Attendance</th>
+              <th style="${thStyle}; width: 20%;">Tasks Completed</th>
+              <th style="${thStyle}; width: 20%;">Tasks Pending</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+      </div>
+      <div style="${footerStyle}">
+        This report is generated automatically by your employee tracking app.
+      </div>
+    </div>
+  `;
+}
