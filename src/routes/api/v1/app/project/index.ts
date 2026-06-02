@@ -45,6 +45,15 @@ async function notifyNewMembers(
 export default async function projectRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
 
+  fastify.get('/active-members', async (request, reply) => {
+    const user = request.user as any;
+    const members = await User.find({
+      organizationId: user.organizationId,
+      status: 'ACTIVE'
+    }).select('name email role').lean();
+    return reply.ok({ members });
+  });
+
   fastify.post('/', async (request, reply) => {
     const user = request.user as any;
     const { name, description, dueDate, members } = request.body as any;
@@ -145,4 +154,45 @@ export default async function projectRoutes(fastify: FastifyInstance) {
 
     return reply.ok({ message: 'Project updated', project });
   });
+
+  fastify.delete('/:id', async (request, reply) => {
+    const user = request.user as any;
+    const { id } = request.params as any;
+
+    const project = await Project.findOne({ _id: id, organizationId: user.organizationId });
+    if (!project) {
+      return reply.notFound('Project not found');
+    }
+
+    if (user.role !== 'ADMIN' && project.createdBy.toString() !== user.id) {
+      return reply.forbidden('403', 'Only admin or project creator can delete the project');
+    }
+
+    await Project.deleteOne({ _id: id });
+    await Todo.updateMany({ projectId: id }, { $unset: { projectId: 1 } });
+
+    return reply.ok({ message: 'Project deleted successfully' });
+  });
+
+  fastify.get('/:id/todos', async (request, reply) => {
+    const user = request.user as any;
+    const { id } = request.params as any;
+    const { page = 1, limit = 10 } = request.query as any;
+
+    const project = await Project.findOne({ _id: id, organizationId: user.organizationId });
+    if (!project) {
+      return reply.notFound('Project not found');
+    }
+
+    const total = await Todo.countDocuments({ projectId: id });
+    const todos = await Todo.find({ projectId: id })
+      .populate('userId', 'name email')
+      .populate('assignedBy', 'name email')
+      .sort({ date: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    return reply.ok({ todos, total, page: Number(page), limit: Number(limit) });
+  });
 }
+

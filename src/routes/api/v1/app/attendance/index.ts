@@ -71,22 +71,29 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
   // GET /history
   fastify.get('/history', async (request, reply) => {
     const user = request.user as any;
+    const { page = 1, limit = 10 } = request.query as any;
 
+    const total = await Attendance.countDocuments({ userId: user.id });
     const records = await Attendance.find({ userId: user.id })
       .sort({ date: -1 })
-      .limit(30)
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit))
       .lean();
 
-    return reply.ok({ records });
+    return reply.ok({ records, total, page: Number(page), limit: Number(limit) });
   });
 
-  // GET /contribution — highly optimized attendance for contribution graph (current month)
+  // GET /contribution — highly optimized attendance for contribution graph (selected or current month/year)
   fastify.get('/contribution', async (request, reply) => {
     const user = request.user as any;
+    const { month, year } = request.query as any;
+
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const monthPrefix = `${year}-${month}-`;
+    const targetYear = year ? Number(year) : now.getFullYear();
+    const targetMonth = month ? Number(month) : (now.getMonth() + 1);
+
+    const monthStr = String(targetMonth).padStart(2, '0');
+    const monthPrefix = `${targetYear}-${monthStr}-`;
 
     const records = await Attendance.find({
       userId: user.id,
@@ -97,6 +104,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
 
     return reply.ok({ records });
   });
+
 
   // GET /stats — weekly working hours, punctuality, and org start time
   fastify.get('/stats', async (request, reply) => {

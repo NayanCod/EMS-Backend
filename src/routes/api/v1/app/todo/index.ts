@@ -104,23 +104,60 @@ export default async function todoRoutes(fastify: FastifyInstance) {
     return reply.ok({ message: 'Todo updated', todo });
   });
 
-  fastify.get('/', async (request: FastifyRequest<{ Querystring: { filter?: string } }>, reply) => {
+  fastify.get('/', async (request: FastifyRequest<{ Querystring: { filter?: string; page?: string; limit?: string } }>, reply) => {
     const user = request.user as any;
-    const { filter } = request.query;
+    const { filter, page = '1', limit = '10' } = request.query;
 
-    const query: any = { userId: user.id };
+    const baseQuery = { userId: user.id };
+    const query: any = { ...baseQuery };
 
-    if (filter === 'daily') {
-      query.date = new Date().toISOString().split('T')[0];
-    } else if (filter === 'weekly' || filter === 'monthly') {
-      // Typically implemented with $gte and $lte for dates, 
-      // simplified to returning all for now if daily isn't specified
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    if (filter === 'today') {
+      query.date = todayStr;
+    } else if (filter === 'pending') {
+      query.status = { $ne: 'completed' };
+    } else if (filter === 'completed') {
+      query.status = 'completed';
     }
-    
+
+    const total = await Todo.countDocuments(query);
     const todos = await Todo.find(query)
       .populate('projectId', 'name')
       .populate('assignedBy', 'name')
-      .sort({ date: -1 });
-    return reply.ok({ todos });
+      .sort({ date: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    // Get global counts
+    const pendingCount = await Todo.countDocuments({ userId: user.id, status: { $ne: 'completed' } });
+    const completedCount = await Todo.countDocuments({ userId: user.id, status: 'completed' });
+
+    return reply.ok({
+      todos,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      pendingCount,
+      completedCount
+    });
+  });
+
+  fastify.delete('/:id', async (request, reply) => {
+    const user = request.user as any;
+    const { id } = request.params as any;
+
+    const todo = await Todo.findById(id);
+    if (!todo) {
+      return reply.notFound('Todo not found');
+    }
+
+    if (todo.userId.toString() !== user.id && user.role !== 'ADMIN') {
+      return reply.forbidden('403', 'Only the task owner or admin can delete this task');
+    }
+
+    await Todo.deleteOne({ _id: id });
+    return reply.ok({ message: 'Todo deleted successfully' });
   });
 }
+

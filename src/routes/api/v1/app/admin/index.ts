@@ -121,8 +121,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('-password');
     if (!user) return reply.notFound('Employee not found in your organization');
 
-    const attendance = await Attendance.find({ userId: id }).sort({ date: -1 });
-    const tasks = await Todo.find({ userId: id }).sort({ date: -1 });
+    const attendance = await Attendance.find({ userId: id }).sort({ date: -1 }).limit(5);
+    const tasks = await Todo.find({ userId: id }).sort({ date: -1 }).limit(5);
 
     return reply.ok({ user, attendance, tasks });
   });
@@ -130,6 +130,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/employee/:id/contribution', async (request, reply) => {
     const admin = request.user as any;
     const { id } = request.params as any;
+    const { month, year } = request.query as any;
 
     // Check organization membership first
     const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('_id');
@@ -138,9 +139,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     }
 
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const monthPrefix = `${year}-${month}-`;
+    const targetYear = year ? Number(year) : now.getFullYear();
+    const targetMonth = month ? Number(month) : (now.getMonth() + 1);
+
+    const monthStr = String(targetMonth).padStart(2, '0');
+    const monthPrefix = `${targetYear}-${monthStr}-`;
 
     const records = await Attendance.find({
       userId: id,
@@ -151,6 +154,43 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     return reply.ok({ records });
   });
+
+  fastify.get('/employee/:id/attendance', async (request, reply) => {
+    const admin = request.user as any;
+    const { id } = request.params as any;
+    const { page = 1, limit = 10 } = request.query as any;
+
+    const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('_id');
+    if (!user) return reply.notFound('Employee not found');
+
+    const total = await Attendance.countDocuments({ userId: id });
+    const records = await Attendance.find({ userId: id })
+      .sort({ date: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit))
+      .lean();
+
+    return reply.ok({ records, total, page: Number(page), limit: Number(limit) });
+  });
+
+  fastify.get('/employee/:id/todos', async (request, reply) => {
+    const admin = request.user as any;
+    const { id } = request.params as any;
+    const { page = 1, limit = 10 } = request.query as any;
+
+    const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('_id');
+    if (!user) return reply.notFound('Employee not found');
+
+    const total = await Todo.countDocuments({ userId: id });
+    const todos = await Todo.find({ userId: id })
+      .sort({ date: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit))
+      .lean();
+
+    return reply.ok({ todos, total, page: Number(page), limit: Number(limit) });
+  });
+
 
   fastify.get('/organization', async (request, reply) => {
     const admin = request.user as any;
