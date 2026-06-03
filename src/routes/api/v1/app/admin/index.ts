@@ -4,6 +4,8 @@ import { User } from '../../../../../models/User';
 import { Attendance } from '../../../../../models/Attendance';
 import { Todo } from '../../../../../models/Todo';
 import { Organization } from '../../../../../models/Organization';
+import { SampleCollection } from '../../../../../models/SampleCollection';
+
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Protect all admin routes with requireAdmin hook
@@ -190,6 +192,40 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     return reply.ok({ todos, total, page: Number(page), limit: Number(limit) });
   });
+
+  fastify.get('/employee/:id/sample-collections', async (request, reply) => {
+    const admin = request.user as any;
+    const { id } = request.params as any;
+    const { page = 1, limit = 10 } = request.query as any;
+
+    const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('_id');
+    if (!user) return reply.notFound('Employee not found');
+
+    const total = await SampleCollection.countDocuments({ userId: id });
+    const collections = await SampleCollection.find({ userId: id })
+      .sort({ createdAt: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit))
+      .lean();
+
+    return reply.ok({
+      collections: collections.map((c: any) => ({
+        id: c._id,
+        purpose: c.purpose,
+        sampleType: c.sampleType,
+        clientEmail: c.clientEmail,
+        status: c.status,
+        startLocation: c.startLocation,
+        endLocation: c.endLocation,
+        startedAt: c.startedAt,
+        completedAt: c.completedAt
+      })),
+      total,
+      page: Number(page),
+      limit: Number(limit)
+    });
+  });
+
 
 
   fastify.get('/organization', async (request, reply) => {

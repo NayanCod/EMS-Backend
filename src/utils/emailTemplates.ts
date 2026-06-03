@@ -267,3 +267,32 @@ export function getMonthlyReportTemplate(monthName: string, orgName: string, rec
     </div>
   `;
 }
+
+export function getSampleCollectionOTPTemplate(purpose: string, sampleType: string, otp: string, employeeName: string): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 24px;">Verification Code</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Dear Customer,</p>
+        <p>An employee, <strong>${employeeName}</strong>, is initiating a sample collection from you for the following purpose:</p>
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0;"><strong>Purpose:</strong> ${purpose}</p>
+          <p style="margin: 4px 0 0 0;"><strong>Sample Type:</strong> ${sampleType}</p>
+        </div>
+        <p>Please share the following OTP (One-Time Password) with the employee to verify and complete the sample collection:</p>
+        <div style="text-align: center; margin: 24px 0;">
+          <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #208AEF; padding: 8px 16px; border: 2px dashed #208AEF; border-radius: 8px; background-color: #f0f7ff;">
+            ${otp}
+          </span>
+        </div>
+        <p style="color: #666666; font-size: 14px;">If you did not request this sample collection, please ignore this email.</p>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated security verification code. Do not share this code with anyone other than the verifying agent.
+      </div>
+    </div>
+  `;
+}
+
