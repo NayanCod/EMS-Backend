@@ -5,6 +5,8 @@ import { Attendance } from '../../../../../models/Attendance';
 import { Todo } from '../../../../../models/Todo';
 import { Organization } from '../../../../../models/Organization';
 import { SampleCollection } from '../../../../../models/SampleCollection';
+import Reimbursement from '../../../../../models/Reimbursement';
+import { createDownloadUrl } from '../../../../../services/s3Service';
 
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -125,8 +127,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     const attendance = await Attendance.find({ userId: id }).sort({ date: -1 }).limit(5);
     const tasks = await Todo.find({ userId: id }).sort({ date: -1 }).limit(5);
+    const reimbursements = await Reimbursement.find({ userId: id }).sort({ createdAt: -1 }).limit(5).lean();
 
-    return reply.ok({ user, attendance, tasks });
+    return reply.ok({ user, attendance, tasks, reimbursements });
   });
 
   fastify.get('/employee/:id/contribution', async (request, reply) => {
@@ -354,5 +357,147 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     }
 
     return reply.ok({ reports: { dailyReports, monthlyReports } });
+  });
+
+  // List all organization reimbursements
+  fastify.get('/reimbursement', async (request, reply) => {
+    const admin = request.user as any;
+    const { status, employeeId } = request.query as any;
+
+    const query: any = { organizationId: admin.organizationId };
+    if (status && status !== 'all') {
+      query.status = status === 'pending' ? 'submitted' : status;
+    }
+    if (employeeId) {
+      query.userId = employeeId;
+    }
+
+    const reimbursements = await Reimbursement.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const enrichedReimbursements = await Promise.all(
+      reimbursements.map(async (r: any) => {
+        const user = await User.findById(r.userId).select('name designation employeeId').lean();
+        return {
+          ...r,
+          employee: user,
+        };
+      })
+    );
+
+    return reply.ok({ reimbursements: enrichedReimbursements });
+  });
+
+  // Get specific reimbursement details for admin review
+  fastify.get('/reimbursement/:id', async (request, reply) => {
+    const admin = request.user as any;
+    const { id } = request.params as any;
+
+    const reimbursement = await Reimbursement.findOne({
+      _id: id,
+      organizationId: admin.organizationId,
+    });
+
+    if (!reimbursement) {
+      return reply.notFound('Reimbursement not found');
+    }
+
+    const employee = await User.findById(reimbursement.userId).select('name designation employeeId email phoneNumber').lean();
+
+    const items = await Promise.all(
+      reimbursement.items.map(async (item: any) => {
+        let imageUrl = '';
+        if (item.imageKey) {
+          try {
+            imageUrl = await createDownloadUrl({
+              s3: (fastify as any).s3,
+              bucket: (fastify as any).s3Bucket,
+              key: item.imageKey,
+            });
+          } catch (err) {
+            console.error('Error signing imageKey:', item.imageKey, err);
+          }
+        }
+        return {
+          _id: item._id,
+          imageKey: item.imageKey,
+          amount: item.amount,
+          category: item.category,
+          label: item.label,
+          imageUrl,
+        };
+      })
+    );
+
+    let billsPdfUrl = '';
+    if (reimbursement.billsPdfKey) {
+      try {
+        billsPdfUrl = await createDownloadUrl({
+          s3: (fastify as any).s3,
+          bucket: (fastify as any).s3Bucket,
+          key: reimbursement.billsPdfKey,
+        });
+      } catch (err) {
+        console.error('Error signing billsPdfKey:', err);
+      }
+    }
+
+    let invoicePdfUrl = '';
+    if (reimbursement.invoicePdfKey) {
+      try {
+        invoicePdfUrl = await createDownloadUrl({
+          s3: (fastify as any).s3,
+          bucket: (fastify as any).s3Bucket,
+          key: reimbursement.invoicePdfKey,
+        });
+      } catch (err) {
+        console.error('Error signing invoicePdfKey:', err);
+      }
+    }
+
+    const reimbursementObj = reimbursement.toObject();
+    return reply.ok({
+      reimbursement: {
+        ...reimbursementObj,
+        items,
+        billsPdfUrl,
+        invoicePdfUrl,
+        employee,
+      },
+    });
+  });
+
+  // Review a reimbursement (approve / reject)
+  fastify.post('/reimbursement/:id/review', async (request, reply) => {
+    const admin = request.user as any;
+    const { id } = request.params as any;
+    const { action, adminNote } = request.body as any;
+
+    if (!['approve', 'reject'].includes(action)) {
+      return reply.badRequest('400', 'Action must be approve or reject');
+    }
+
+    const reimbursement = await Reimbursement.findOne({
+      _id: id,
+      organizationId: admin.organizationId,
+    });
+
+    if (!reimbursement) {
+      return reply.notFound('Reimbursement not found');
+    }
+
+    if (reimbursement.status !== 'submitted') {
+      return reply.badRequest('400', 'Only submitted reimbursements can be reviewed');
+    }
+
+    reimbursement.status = action === 'approve' ? 'approved' : 'rejected';
+    reimbursement.adminNote = adminNote || '';
+    reimbursement.reviewedBy = admin._id;
+    reimbursement.reviewedAt = new Date();
+
+    await reimbursement.save();
+
+    return reply.ok({ reimbursement });
   });
 }
