@@ -71,16 +71,79 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
   // GET /history
   fastify.get('/history', async (request, reply) => {
     const user = request.user as any;
-    const { page = 1, limit = 10 } = request.query as any;
+    const { page = 1, limit = 10, status = 'all' } = request.query as any;
 
-    const total = await Attendance.countDocuments({ userId: user.id });
-    const records = await Attendance.find({ userId: user.id })
-      .sort({ date: -1 })
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit))
+    const earliestRecord = await Attendance.findOne({ userId: user.id })
+      .sort({ date: 1 })
       .lean();
 
-    return reply.ok({ records, total, page: Number(page), limit: Number(limit) });
+    let limitDays = 60;
+    if (earliestRecord) {
+      const [ey, em, ed] = earliestRecord.date.split('-').map(Number);
+      const earliestDate = new Date(ey, em - 1, ed);
+      
+      const now = new Date();
+      const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      const diffTime = todayDate.getTime() - earliestDate.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      
+      limitDays = Math.max(1, diffDays);
+    } else {
+      limitDays = 1;
+    }
+
+    const today = new Date();
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - (limitDays - 1));
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const todayStr = today.toISOString().split('T')[0];
+
+    const attendanceRecords = await Attendance.find({
+      userId: user.id,
+      date: { $gte: startDateStr, $lte: todayStr }
+    }).lean();
+
+    const attendanceMap = new Map();
+    for (const record of attendanceRecords) {
+      attendanceMap.set(record.date, record);
+    }
+
+    const allItems = [];
+    for (let i = 0; i < limitDays; i++) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const record = attendanceMap.get(dateStr);
+
+      if (record) {
+        allItems.push({
+          _id: record._id.toString(),
+          date: dateStr,
+          checkInTime: record.checkInTime,
+          checkOutTime: record.checkOutTime,
+          status: 'present',
+        });
+      } else {
+        const dayOfWeek = d.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        allItems.push({
+          _id: `absent-${dateStr}`,
+          date: dateStr,
+          status: isWeekend ? 'off-day' : 'absent',
+        });
+      }
+    }
+
+    let filteredItems = allItems;
+    if (status !== 'all') {
+      filteredItems = allItems.filter(item => item.status === status);
+    }
+
+    const total = filteredItems.length;
+    const paginatedItems = filteredItems.slice((Number(page) - 1) * Number(limit), Number(page) * Number(limit));
+
+    return reply.ok({ records: paginatedItems, total, page: Number(page), limit: Number(limit) });
   });
 
   // GET /contribution — highly optimized attendance for contribution graph (selected or current month/year)

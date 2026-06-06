@@ -17,6 +17,7 @@ export interface ISampleCollection extends Document {
     longitude: number;
     address?: string;
   };
+  sampleImage?: string;
   startedAt: Date;
   completedAt?: Date;
   createdAt: Date;
@@ -40,6 +41,7 @@ const SampleCollectionSchema: Schema = new Schema({
     longitude: { type: Number },
     address: { type: String }
   },
+  sampleImage: { type: String },
   startedAt: { type: Date, default: Date.now },
   completedAt: { type: Date },
 }, {

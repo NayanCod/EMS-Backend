@@ -92,7 +92,7 @@ export default async function projectRoutes(fastify: FastifyInstance) {
       query.members = user.id;
     }
 
-    const projects = await Project.find(query).sort({ createdAt: -1 });
+    const projects = await Project.find(query).populate('members', 'name email role').sort({ createdAt: -1 });
     return reply.ok({ projects });
   });
 
@@ -155,6 +155,30 @@ export default async function projectRoutes(fastify: FastifyInstance) {
     return reply.ok({ message: 'Project updated', project });
   });
 
+  fastify.post('/:id/remove-member', async (request, reply) => {
+    const user = request.user as any;
+    const { id } = request.params as any;
+    const { memberId } = request.body as any;
+
+    if (!memberId) {
+      return reply.badRequest('400', 'Member ID is required');
+    }
+
+    const project = await Project.findOne({ _id: id, organizationId: user.organizationId });
+    if (!project) {
+      return reply.notFound('Project not found');
+    }
+
+    if (user.role !== 'ADMIN' && project.createdBy.toString() !== user.id) {
+      return reply.forbidden('403', 'Only admin or project creator can manage members');
+    }
+
+    project.members = project.members.filter(m => m.toString() !== memberId);
+    await project.save();
+
+    return reply.ok({ message: 'Member removed from project', project });
+  });
+
   fastify.delete('/:id', async (request, reply) => {
     const user = request.user as any;
     const { id } = request.params as any;
@@ -169,7 +193,7 @@ export default async function projectRoutes(fastify: FastifyInstance) {
     }
 
     await Project.deleteOne({ _id: id });
-    await Todo.updateMany({ projectId: id }, { $unset: { projectId: 1 } });
+    await Todo.deleteMany({ projectId: id });
 
     return reply.ok({ message: 'Project deleted successfully' });
   });

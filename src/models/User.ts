@@ -13,6 +13,7 @@ export interface IUser extends Document {
   emailNotificationsEnabled: boolean;
   appNotificationsEnabled: boolean;
   status: 'ACTIVE' | 'INACTIVE' | 'REMOVED';
+  profileImage?: string;
 }
 
 const UserSchema: Schema = new Schema({
@@ -35,6 +36,7 @@ const UserSchema: Schema = new Schema({
   emailNotificationsEnabled: { type: Boolean, default: true },
   appNotificationsEnabled: { type: Boolean, default: true },
   status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'REMOVED'], default: 'ACTIVE' },
+  profileImage: { type: String },
 }, {
   timestamps: true,
 });

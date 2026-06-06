@@ -122,8 +122,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/employee/:id', async (request, reply) => {
     const admin = request.user as any;
     const { id } = request.params as any;
-    const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('-password');
+    const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).populate('organizationId', 'name').select('-password').lean() as any;
     if (!user) return reply.notFound('Employee not found in your organization');
+
+    let profileImageUrl = "";
+    if (user.profileImage) {
+      try {
+        profileImageUrl = await createDownloadUrl({
+          s3: fastify.s3,
+          bucket: fastify.s3Bucket,
+          key: user.profileImage,
+        });
+      } catch (err) {
+        console.error("Error signing profile image URL for employee details:", err);
+      }
+    }
+    user.profileImageUrl = profileImageUrl;
 
     const attendance = await Attendance.find({ userId: id }).sort({ date: -1 }).limit(5);
     const tasks = await Todo.find({ userId: id }).sort({ date: -1 }).limit(5);
@@ -211,18 +225,38 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       .limit(Number(limit))
       .lean();
 
+    const enriched = await Promise.all(
+      collections.map(async (c: any) => {
+        let sampleImageUrl = '';
+        if (c.sampleImage) {
+          try {
+            sampleImageUrl = await createDownloadUrl({
+              s3: fastify.s3,
+              bucket: fastify.s3Bucket,
+              key: c.sampleImage,
+            });
+          } catch (err) {
+            console.error('Error signing sampleImage for admin:', err);
+          }
+        }
+        return {
+          id: c._id,
+          purpose: c.purpose,
+          sampleType: c.sampleType,
+          clientEmail: c.clientEmail,
+          status: c.status,
+          startLocation: c.startLocation,
+          endLocation: c.endLocation,
+          sampleImage: c.sampleImage,
+          sampleImageUrl,
+          startedAt: c.startedAt,
+          completedAt: c.completedAt
+        };
+      })
+    );
+
     return reply.ok({
-      collections: collections.map((c: any) => ({
-        id: c._id,
-        purpose: c.purpose,
-        sampleType: c.sampleType,
-        clientEmail: c.clientEmail,
-        status: c.status,
-        startLocation: c.startLocation,
-        endLocation: c.endLocation,
-        startedAt: c.startedAt,
-        completedAt: c.completedAt
-      })),
+      collections: enriched,
       total,
       page: Number(page),
       limit: Number(limit)

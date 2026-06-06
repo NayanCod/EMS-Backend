@@ -5,13 +5,20 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
   // Protect all notification routes
   fastify.addHook('preValidation', fastify.authenticate);
 
-  // Fetch unread notifications
+  // Fetch notifications with optional status filtering
   fastify.get('/', async (request, reply) => {
     const user = request.user as any;
-    const notifications = await Notification.find({
-      userId: user.id,
-      status: 'unread'
-    }).sort({ createdAt: -1 });
+    const { status } = request.query as any;
+
+    const query: any = { userId: user.id };
+    if (status === 'unread' || status === 'read') {
+      query.status = status;
+    } else if (status !== 'all') {
+      // Default to unread for backwards compatibility if no status param is provided
+      query.status = 'unread';
+    }
+
+    const notifications = await Notification.find(query).sort({ createdAt: -1 });
 
     return reply.ok({ notifications });
   });

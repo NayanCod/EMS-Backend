@@ -101,3 +101,59 @@ export async function deleteS3Object(params: {
     });
     await params.s3.send(command);
 }
+
+export async function createProfileUploadUrl(params: {
+    s3: S3Client;
+    bucket: string;
+    userId: string;
+    fileName: string;
+    contentType: string;
+}) {
+    if (!allowedTypes.includes(params.contentType)) {
+        throw new Error("Only JPG, PNG and WEBP are allowed");
+    }
+
+    const ext = path.extname(params.fileName) || ".jpg";
+
+    const imageKey = `users/${params.userId}/avatar/${randomUUID()}${ext}`;
+
+    const command = new PutObjectCommand({
+        Bucket: params.bucket,
+        Key: imageKey,
+        ContentType: params.contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(params.s3, command, {
+        expiresIn: 300,
+    });
+
+    return { uploadUrl, imageKey };
+}
+
+export async function createSampleUploadUrl(params: {
+    s3: S3Client;
+    bucket: string;
+    userId: string;
+    fileName: string;
+    contentType: string;
+}) {
+    if (!allowedTypes.includes(params.contentType)) {
+        throw new Error("Only JPG, PNG and WEBP are allowed");
+    }
+
+    const ext = path.extname(params.fileName) || ".jpg";
+
+    const imageKey = `samples/${params.userId}/${randomUUID()}${ext}`;
+
+    const command = new PutObjectCommand({
+        Bucket: params.bucket,
+        Key: imageKey,
+        ContentType: params.contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(params.s3, command, {
+        expiresIn: 300,
+    });
+
+    return { uploadUrl, imageKey };
+}
