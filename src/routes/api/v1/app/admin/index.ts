@@ -82,14 +82,27 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const employeeIds = employees.map(e => e._id);
     const attendances = await Attendance.find({ date: today, userId: { $in: employeeIds } }).lean();
 
-    const employeesWithStatus = employees.map(emp => {
+    const employeesWithStatus = await Promise.all(employees.map(async emp => {
       const att = attendances.find(a => a.userId.toString() === emp._id.toString());
+      let profileImageUrl = "";
+      if (emp.profileImage) {
+        try {
+          profileImageUrl = await createDownloadUrl({
+            s3: fastify.s3,
+            bucket: fastify.s3Bucket,
+            key: emp.profileImage,
+          });
+        } catch (err) {
+          console.error("Error signing profile image URL for employee list:", err);
+        }
+      }
       return {
         ...emp,
+        profileImageUrl,
         attendanceStatus: att ? 'Present' : 'Absent',
         clockInTime: att ? att.checkInTime : null
       };
-    });
+    }));
 
     return reply.ok({ employees: employeesWithStatus });
   });
@@ -412,10 +425,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     const enrichedReimbursements = await Promise.all(
       reimbursements.map(async (r: any) => {
-        const user = await User.findById(r.userId).select('name designation employeeId').lean();
+        const user = await User.findById(r.userId).select('name designation employeeId profileImage').lean() as any;
+        let profileImageUrl = "";
+        if (user?.profileImage) {
+          try {
+            profileImageUrl = await createDownloadUrl({
+              s3: fastify.s3,
+              bucket: fastify.s3Bucket,
+              key: user.profileImage,
+            });
+          } catch (err) {
+            console.error("Error signing employee profile image in reimbursement list:", err);
+          }
+        }
         return {
           ...r,
-          employee: user,
+          employee: user ? { ...user, profileImageUrl } : null,
         };
       })
     );
@@ -437,7 +462,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       return reply.notFound('Reimbursement not found');
     }
 
-    const employee = await User.findById(reimbursement.userId).select('name designation employeeId email phoneNumber').lean();
+    const employee = await User.findById(reimbursement.userId).select('name designation employeeId email phoneNumber profileImage').lean() as any;
+    let profileImageUrl = "";
+    if (employee?.profileImage) {
+      try {
+        profileImageUrl = await createDownloadUrl({
+          s3: (fastify as any).s3,
+          bucket: (fastify as any).s3Bucket,
+          key: employee.profileImage,
+        });
+      } catch (err) {
+        console.error("Error signing employee profile image in reimbursement details:", err);
+      }
+    }
+    if (employee) {
+      employee.profileImageUrl = profileImageUrl;
+    }
 
     const items = await Promise.all(
       reimbursement.items.map(async (item: any) => {
