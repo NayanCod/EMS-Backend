@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: emp-redis
+    command: redis-server --requirepass mypassword
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: emp-backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=mypassword
+      - PORT=5000
+      - FASTIFY_ADDRESS=0.0.0.0
+    restart: always
+
+volumes:
+  redis-data:
