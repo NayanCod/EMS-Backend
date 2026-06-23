@@ -484,4 +484,36 @@ export function getClaimCommentTemplate(
   `;
 }
 
+export function getProjectCommentTemplate(
+  recipientName: string,
+  commenterName: string,
+  projectName: string,
+  commentText: string,
+  isReply: boolean
+): string {
+  const subjectText = isReply ? `New reply on project discussion` : `New comment on project discussion`;
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 20px;">${subjectText}</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${recipientName}</strong>,</p>
+        <p><strong>${commenterName}</strong> left a comment on the project <strong>${projectName}</strong>:</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0; font-style: italic;">
+          "${commentText}"
+        </div>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://projects" style="${buttonStyle}">View Project Discussion</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification. Please do not reply directly to this email.
+      </div>
+    </div>
+  `;
+}
+
 
