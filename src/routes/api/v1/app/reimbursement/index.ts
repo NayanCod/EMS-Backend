@@ -1,8 +1,15 @@
 import { FastifyPluginAsync } from "fastify";
+import mongoose from "mongoose";
 import Reimbursement from "../../../../../models/Reimbursement";
 import { User } from "../../../../../models/User";
+import { Notification } from "../../../../../models/Notification";
 import { createBillUploadUrl, createDownloadUrl, uploadS3Object, deleteS3Object } from "../../../../../services/s3Service";
 import { generateReimbursementPdf } from "../../../../../services/pdfService";
+import { sendMail } from "../../../../../services/emailService";
+import {
+    getClaimSubmittedAdminTemplate,
+    getClaimCommentTemplate,
+} from "../../../../../utils/emailTemplates";
 
 const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
     // List my reimbursements
@@ -53,7 +60,7 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
              const reimbursement = await Reimbursement.findOne({
                 _id: id,
                 userId: request.user.id || request.user._id,
-            });
+            }).populate("comments.userId", "name role profileImage");
 
             if (!reimbursement) {
                 return reply.notFound("Reimbursement not found");
@@ -112,7 +119,23 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                 }
             }
 
-            const reimbursementObj = reimbursement.toObject();
+            const reimbursementObj = reimbursement.toObject() as any;
+            if (reimbursementObj.comments) {
+                for (const comment of reimbursementObj.comments) {
+                    if (comment.userId && comment.userId.profileImage) {
+                        try {
+                            comment.userId.profileImageUrl = await createDownloadUrl({
+                                s3: fastify.s3,
+                                bucket: fastify.s3Bucket,
+                                key: comment.userId.profileImage,
+                            });
+                        } catch (err) {
+                            console.error("Error signing comment profileImage:", err);
+                        }
+                    }
+                }
+            }
+
             return reply.ok({
                 reimbursement: {
                     ...reimbursementObj,
@@ -332,7 +355,7 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
 
             // Dynamic S3 PDF Generation & Upload
             try {
-                const employee = await User.findById(reimbursement.userId).lean();
+                const employee = await User.findById(reimbursement.userId).lean() as any;
                 const pdfBuffer = await generateReimbursementPdf({
                     s3: fastify.s3,
                     bucket: fastify.s3Bucket,
@@ -347,11 +370,192 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                     body: pdfBuffer,
                     contentType: "application/pdf",
                 });
+
+                // Notify admins
+                if (employee) {
+                    const admins = await User.find({
+                        organizationId: reimbursement.organizationId,
+                        role: "ADMIN",
+                        status: "ACTIVE"
+                    });
+
+                    for (const admin of admins) {
+                        if (admin.appNotificationsEnabled !== false) {
+                            const notification = new Notification({
+                                userId: admin._id,
+                                title: "New Claim Submitted",
+                                message: `${employee.name} submitted a new claim "${reimbursement.title}" for ₹${reimbursement.totalAmount.toFixed(2)}`
+                            });
+                            await notification.save();
+                        }
+
+                        if (admin.emailNotificationsEnabled !== false && admin.email) {
+                            const html = getClaimSubmittedAdminTemplate(
+                                admin.name,
+                                employee.name,
+                                reimbursement.title,
+                                reimbursement.totalAmount,
+                                reimbursement.referenceNumber
+                            );
+                            sendMail({
+                                to: admin.email,
+                                subject: `New Claim Submitted: ${reimbursement.referenceNumber}`,
+                                html,
+                            });
+                        }
+                    }
+                }
             } catch (err) {
-                console.error("Failed to generate/upload PDF on claim submission:", err);
+                console.error("Failed to generate/upload PDF or notify admins on claim submission:", err);
             }
 
             return reply.ok({ reimbursement });
+        }
+    );
+
+    // Add comment to reimbursement claim (discussion)
+    fastify.post(
+        "/:id/comments",
+        { preHandler: [fastify.authenticate] },
+        async (request: any, reply) => {
+            const { id } = request.params;
+            const { message, parentId } = request.body as { message: string; parentId?: string };
+
+            if (!message?.trim()) {
+                return reply.badRequest("500", "Message is required");
+            }
+
+            const reimbursement = await Reimbursement.findOne({ _id: id });
+            if (!reimbursement) {
+                return reply.notFound("Reimbursement not found");
+            }
+
+            const currentUser = request.user;
+            const isEmployee = currentUser.role === "EMPLOYEE";
+            const isAdmin = currentUser.role === "ADMIN";
+
+            // Verify authorization
+            if (isEmployee && reimbursement.userId.toString() !== (currentUser.id || currentUser._id).toString()) {
+                return reply.forbidden("403", "You do not have permission to view this reimbursement");
+            }
+            if (isAdmin && reimbursement.organizationId.toString() !== currentUser.organizationId.toString()) {
+                return reply.forbidden("403", "You do not have permission to access this organization's reimbursement");
+            }
+
+            // Create comment
+            const newComment = {
+                _id: new mongoose.Types.ObjectId(),
+                userId: currentUser.id || currentUser._id,
+                message: message.trim(),
+                parentId: parentId ? new mongoose.Types.ObjectId(parentId) : undefined,
+                createdAt: new Date(),
+            } as any;
+
+            reimbursement.comments.push(newComment);
+            await reimbursement.save();
+
+            // Notify appropriate parties
+            const commenterName = currentUser.name;
+            const claimTitle = reimbursement.title;
+
+            // Fetch claim employee details for notification/email
+            const employeeUser = await User.findById(reimbursement.userId).select("name email emailNotificationsEnabled appNotificationsEnabled").lean();
+
+            // Case A: Reply to an existing comment
+            if (parentId) {
+                const parentComment = reimbursement.comments.find(c => c._id.toString() === parentId);
+                if (parentComment && parentComment.userId.toString() !== (currentUser.id || currentUser._id).toString()) {
+                    // Send to the author of the parent comment
+                    const repliedUser = await User.findById(parentComment.userId).select("name email role emailNotificationsEnabled appNotificationsEnabled").lean();
+                    if (repliedUser) {
+                        // In-app notification
+                        if (repliedUser.appNotificationsEnabled !== false) {
+                            const notification = new Notification({
+                                userId: repliedUser._id,
+                                title: "New reply on claim discussion",
+                                message: `${commenterName} replied: "${message}"`
+                            });
+                            await notification.save();
+                        }
+                        // Email notification
+                        if (repliedUser.emailNotificationsEnabled !== false && repliedUser.email) {
+                            const html = getClaimCommentTemplate(repliedUser.name, commenterName, claimTitle, message, true);
+                            sendMail({
+                                to: repliedUser.email,
+                                subject: `Reply on claim discussion: "${claimTitle}"`,
+                                html
+                            });
+                        }
+                    }
+                }
+            } else {
+                // Case B: General comment (no parentId)
+                if (isEmployee) {
+                    // Notify organization admins
+                    const admins = await User.find({
+                        organizationId: reimbursement.organizationId,
+                        role: "ADMIN",
+                        status: "ACTIVE"
+                    });
+                    for (const admin of admins) {
+                        if (admin.appNotificationsEnabled !== false) {
+                            const notification = new Notification({
+                                userId: admin._id,
+                                title: "New claim discussion comment",
+                                message: `${commenterName} commented: "${message}"`
+                            });
+                            await notification.save();
+                        }
+                        if (admin.emailNotificationsEnabled !== false && admin.email) {
+                            const html = getClaimCommentTemplate(admin.name, commenterName, claimTitle, message, false);
+                            sendMail({
+                                to: admin.email,
+                                subject: `New comment on claim: "${claimTitle}"`,
+                                html
+                            });
+                        }
+                    }
+                } else if (isAdmin) {
+                    // Notify the employee
+                    if (employeeUser) {
+                        if (employeeUser.appNotificationsEnabled !== false) {
+                            const notification = new Notification({
+                                userId: employeeUser._id,
+                                title: "New claim discussion comment",
+                                message: `Admin ${commenterName} commented: "${message}"`
+                            });
+                            await notification.save();
+                        }
+                        if (employeeUser.emailNotificationsEnabled !== false && employeeUser.email) {
+                            const html = getClaimCommentTemplate(employeeUser.name, commenterName, claimTitle, message, false);
+                            sendMail({
+                                to: employeeUser.email,
+                                subject: `New comment on claim: "${claimTitle}"`,
+                                html
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Populate current user info to return the full comment object for UI
+            const populatedClaim = await Reimbursement.findById(id).populate("comments.userId", "name role profileImage");
+            const savedComment = populatedClaim?.comments.find(c => c._id.toString() === newComment._id.toString());
+            
+            let savedCommentObj = savedComment ? (savedComment as any).toObject() : null;
+            if (savedCommentObj && savedCommentObj.userId && savedCommentObj.userId.profileImage) {
+                try {
+                    savedCommentObj.userId.profileImageUrl = await createDownloadUrl({
+                        s3: fastify.s3,
+                        bucket: fastify.s3Bucket,
+                        key: savedCommentObj.userId.profileImage,
+                    });
+                } catch (err) {
+                    console.error("Error signing new comment profileImage:", err);
+                }
+            }
+
+            return reply.ok({ comment: savedCommentObj });
         }
     );
 

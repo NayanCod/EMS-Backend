@@ -51,7 +51,7 @@ export default async function todoRoutes(fastify: FastifyInstance) {
           const notification = new Notification({
             userId: targetUserId,
             title: 'New Task Assigned',
-            message: `You have been assigned a new task: "${task}"`
+            message: `You have been assigned a new task: "${task}" by ${assignerName}`
           });
           await notification.save();
         }

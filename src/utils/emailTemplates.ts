@@ -296,3 +296,192 @@ export function getSampleCollectionOTPTemplate(purpose: string, sampleType: stri
   `;
 }
 
+export function getAdminWelcomeTemplate(adminName: string, orgName: string, orgCode: string): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 24px;">Welcome to Cluix!</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${adminName}</strong>,</p>
+        <p>Thank you for registering with Cluix! Your organization, <strong>${orgName}</strong>, has been successfully created.</p>
+        
+        <p>To invite your team members and employees to join your organization, please share the following unique <strong>Organization Code</strong> with them:</p>
+        
+        <div style="text-align: center; margin: 24px 0;">
+          <span style="font-size: 28px; font-weight: bold; letter-spacing: 2px; color: #208AEF; padding: 12px 24px; border: 2px solid #208AEF; border-radius: 8px; background-color: #f0f7ff; display: inline-block;">
+            ${orgCode}
+          </span>
+        </div>
+        
+        <p>Your employees will need to enter this code when signing up so they are correctly linked to your organization.</p>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://home" style="${buttonStyle}">Go to Admin Dashboard</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        Thank you for choosing Cluix. If you have any questions, please contact our support team.
+      </div>
+    </div>
+  `;
+}
+
+export function getEmployeeWelcomeTemplate(employeeName: string, orgName: string): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 24px;">Welcome to Cluix!</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${employeeName}</strong>,</p>
+        <p>Welcome to the team! You have successfully registered and joined <strong>${orgName}</strong>.</p>
+        
+        <p>You can now log in using the mobile app to check your attendance, manage tasks assigned by your admin, log reimbursements, and more.</p>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://home" style="${buttonStyle}">Open Employee App</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated welcome email. Welcome aboard!
+      </div>
+    </div>
+  `;
+}
+
+export function getEmployeeJoinedAdminTemplate(adminName: string, employeeName: string, employeeEmail: string, orgCode: string): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 20px;">New Employee Registered</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${adminName}</strong>,</p>
+        <p>A new employee has successfully registered and joined your organization using your Organization Code.</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0;"><strong>Employee Name:</strong> ${employeeName}</p>
+          <p style="margin: 0 0 8px 0;"><strong>Email Address:</strong> ${employeeEmail}</p>
+          <p style="margin: 0;"><strong>Used Org Code:</strong> ${orgCode}</p>
+        </div>
+        
+        <p>You can manage their details, assign tasks, and view their attendance history directly from the Admin Dashboard.</p>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://employees" style="${buttonStyle}">Manage Employees</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification from Cluix Admin Services.
+      </div>
+    </div>
+  `;
+}
+
+export function getClaimSubmittedAdminTemplate(
+  adminName: string,
+  employeeName: string,
+  claimTitle: string,
+  amount: number,
+  refNum: string
+): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 20px;">New Claim Submitted</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${adminName}</strong>,</p>
+        <p>A new reimbursement claim has been submitted by <strong>${employeeName}</strong> and requires your review.</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0;"><strong>Claim Reference:</strong> ${refNum}</p>
+          <p style="margin: 0 0 8px 0;"><strong>Title:</strong> ${claimTitle}</p>
+          <p style="margin: 0;"><strong>Total Amount:</strong> ₹${amount.toFixed(2)}</p>
+        </div>
+        
+        <p>Please review and approve/reject this claim in the admin panel.</p>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://reimbursements" style="${buttonStyle}">Review Claims</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification from Cluix Admin Services.
+      </div>
+    </div>
+  `;
+}
+
+export function getClaimReviewedEmployeeTemplate(
+  employeeName: string,
+  status: string,
+  claimTitle: string,
+  amount: number,
+  adminNote: string | undefined
+): string {
+  const statusColor = status === 'approved' ? '#2e7d32' : '#c62828';
+  const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+  const noteHtml = adminNote ? `<p style="margin: 8px 0 0 0;"><strong>Admin Note:</strong> ${adminNote}</p>` : '';
+
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}; background-color: ${statusColor};">
+        <h1 style="margin: 0; font-size: 20px;">Claim ${statusLabel}</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${employeeName}</strong>,</p>
+        <p>Your reimbursement claim has been <strong>${status}</strong>.</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid ${statusColor}; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0;"><strong>Title:</strong> ${claimTitle}</p>
+          <p style="margin: 0 0 8px 0;"><strong>Total Amount:</strong> ₹${amount.toFixed(2)}</p>
+          <p style="margin: 0 0 8px 0;"><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span></p>
+          ${noteHtml}
+        </div>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://reimbursements" style="${buttonStyle}">View Claim Details</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification. Please do not reply directly to this email.
+      </div>
+    </div>
+  `;
+}
+
+export function getClaimCommentTemplate(
+  recipientName: string,
+  commenterName: string,
+  claimTitle: string,
+  commentText: string,
+  isReply: boolean
+): string {
+  const subjectText = isReply ? `New reply on claim discussion` : `New comment on claim discussion`;
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 20px;">${subjectText}</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${recipientName}</strong>,</p>
+        <p><strong>${commenterName}</strong> left a comment on the claim <strong>${claimTitle}</strong>:</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0; font-style: italic;">
+          "${commentText}"
+        </div>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://reimbursements" style="${buttonStyle}">View Claim Discussion</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification. Please do not reply directly to this email.
+      </div>
+    </div>
+  `;
+}
+
+

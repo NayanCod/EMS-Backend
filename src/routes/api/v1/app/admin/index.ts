@@ -7,6 +7,9 @@ import { Organization } from '../../../../../models/Organization';
 import { SampleCollection } from '../../../../../models/SampleCollection';
 import Reimbursement from '../../../../../models/Reimbursement';
 import { createDownloadUrl } from '../../../../../services/s3Service';
+import { Notification } from '../../../../../models/Notification';
+import { sendMail } from '../../../../../services/emailService';
+import { getClaimReviewedEmployeeTemplate } from '../../../../../utils/emailTemplates';
 
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -456,7 +459,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const reimbursement = await Reimbursement.findOne({
       _id: id,
       organizationId: admin.organizationId,
-    });
+    }).populate('comments.userId', 'name role profileImage');
 
     if (!reimbursement) {
       return reply.notFound('Reimbursement not found');
@@ -530,7 +533,23 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       }
     }
 
-    const reimbursementObj = reimbursement.toObject();
+    const reimbursementObj = reimbursement.toObject() as any;
+    if (reimbursementObj.comments) {
+      for (const comment of reimbursementObj.comments) {
+        if (comment.userId && comment.userId.profileImage) {
+          try {
+            comment.userId.profileImageUrl = await createDownloadUrl({
+              s3: (fastify as any).s3,
+              bucket: (fastify as any).s3Bucket,
+              key: comment.userId.profileImage,
+            });
+          } catch (err) {
+            console.error("Error signing admin comment profileImage:", err);
+          }
+        }
+      }
+    }
+
     return reply.ok({
       reimbursement: {
         ...reimbursementObj,
@@ -571,6 +590,40 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     reimbursement.reviewedAt = new Date();
 
     await reimbursement.save();
+
+    // Notify the employee
+    try {
+      const employee = await User.findById(reimbursement.userId).select('name email emailNotificationsEnabled appNotificationsEnabled').lean() as any;
+      if (employee) {
+        const actionLabel = action === 'approve' ? 'approved' : 'rejected';
+        // In-app notification
+        if (employee.appNotificationsEnabled !== false) {
+          const notification = new Notification({
+            userId: employee._id,
+            title: `Claim ${actionLabel === 'approved' ? 'Approved' : 'Rejected'}`,
+            message: `Your claim "${reimbursement.title}" has been ${actionLabel} by Admin.`
+          });
+          await notification.save();
+        }
+        // Email notification
+        if (employee.emailNotificationsEnabled !== false && employee.email) {
+          const html = getClaimReviewedEmployeeTemplate(
+            employee.name,
+            reimbursement.status,
+            reimbursement.title,
+            reimbursement.totalAmount,
+            reimbursement.adminNote
+          );
+          sendMail({
+            to: employee.email,
+            subject: `Claim ${actionLabel === 'approved' ? 'Approved' : 'Rejected'}: ${reimbursement.referenceNumber}`,
+            html,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to send claim review notification to employee:", err);
+    }
 
     return reply.ok({ reimbursement });
   });

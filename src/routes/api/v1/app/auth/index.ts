@@ -2,7 +2,15 @@ import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { User } from '../../../../../models/User';
 import { Organization } from '../../../../../models/Organization';
+import { Notification } from '../../../../../models/Notification';
+import { sendMail } from '../../../../../services/emailService';
+import {
+  getAdminWelcomeTemplate,
+  getEmployeeWelcomeTemplate,
+  getEmployeeJoinedAdminTemplate
+} from '../../../../../utils/emailTemplates';
 import crypto from 'crypto';
+
 export default async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/login', async (request, reply) => {
     const { email, password } = request.body as any;
@@ -31,6 +39,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       organization: user.organizationId
     });
   });
+
   fastify.post('/signup/admin', async (request, reply) => {
     const { name, email, password, orgName, addressName, latitude, longitude, radius } = request.body as any;
 
@@ -65,6 +74,21 @@ export default async function authRoutes(fastify: FastifyInstance) {
       organizationId: organization._id,
     });
     await user.save();
+
+    // Welcome email & notification to admin
+    const adminWelcomeHtml = getAdminWelcomeTemplate(name, orgName, orgCode);
+    sendMail({
+      to: email,
+      subject: `Welcome to AttendancePro! Your Organization is Registered`,
+      html: adminWelcomeHtml,
+    }).catch(err => console.error('[SignupAdmin] Welcome email failed:', err));
+
+    const adminNotification = new Notification({
+      userId: user._id,
+      title: 'Welcome to AttendancePro',
+      message: `Welcome to AttendancePro! Your organization "${orgName}" has been successfully created. Code: ${orgCode}`
+    });
+    await adminNotification.save().catch(err => console.error('[SignupAdmin] Welcome notification failed:', err));
 
     const token = fastify.jwt.sign({
       id: user._id,
@@ -104,6 +128,51 @@ export default async function authRoutes(fastify: FastifyInstance) {
       organizationId: organization._id,
     });
     await user.save();
+
+    // Welcome notification to employee
+    const empNotification = new Notification({
+      userId: user._id,
+      title: 'Welcome to AttendancePro',
+      message: `Welcome to AttendancePro! You have successfully registered and joined "${organization.name}".`
+    });
+    await empNotification.save().catch(err => console.error('[SignupEmployee] Employee welcome notification failed:', err));
+
+    // Welcome email to employee
+    const employeeWelcomeHtml = getEmployeeWelcomeTemplate(name, organization.name);
+    sendMail({
+      to: email,
+      subject: `Welcome to Cluix! You've joined ${organization.name}`,
+      html: employeeWelcomeHtml,
+    }).catch(err => console.error('[SignupEmployee] Employee welcome email failed:', err));
+
+    // Find and notify organization admin(s)
+    const admins = await User.find({
+      organizationId: organization._id,
+      role: 'ADMIN',
+      status: { $ne: 'REMOVED' }
+    });
+
+    for (const admin of admins) {
+      // Admin email notification
+      if (admin.emailNotificationsEnabled !== false && admin.email) {
+        const adminJoinedHtml = getEmployeeJoinedAdminTemplate(admin.name, name, email, orgCode);
+        sendMail({
+          to: admin.email,
+          subject: `New Employee Joined: ${name}`,
+          html: adminJoinedHtml,
+        }).catch(err => console.error(`[SignupEmployee] Admin email notification failed for ${admin.email}:`, err));
+      }
+
+      // Admin app notification
+      if (admin.appNotificationsEnabled !== false) {
+        const adminNotification = new Notification({
+          userId: admin._id,
+          title: 'New Employee Joined',
+          message: `${name} has joined your company using organization code: ${orgCode}.`
+        });
+        await adminNotification.save().catch(err => console.error(`[SignupEmployee] Admin app notification failed for ${admin.name}:`, err));
+      }
+    }
 
     const token = fastify.jwt.sign({
       id: user._id,

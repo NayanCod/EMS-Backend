@@ -21,6 +21,14 @@ export interface IReimbursementItem {
     label: string;           // short description e.g. "Uber to airport"
 }
 
+export interface IReimbursementComment {
+    _id: mongoose.Types.ObjectId;
+    userId: mongoose.Types.ObjectId;
+    message: string;
+    parentId?: mongoose.Types.ObjectId;
+    createdAt: Date;
+}
+
 export interface IReimbursement extends Document {
     userId: mongoose.Types.ObjectId;
     organizationId: mongoose.Types.ObjectId;
@@ -29,6 +37,7 @@ export interface IReimbursement extends Document {
     notes?: string;          // optional overall description
 
     items: IReimbursementItem[];
+    comments: IReimbursementComment[];
     totalAmount: number;     // sum of all item amounts — updated on every save
 
     status: ReimbursementStatus;
@@ -110,6 +119,14 @@ const ReimbursementSchema = new Schema<IReimbursement>(
 
         items: {
             type: [ReimbursementItemSchema],
+            default: [],
+        },
+        comments: {
+            type: [new Schema({
+                userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+                message: { type: String, required: true, trim: true },
+                parentId: { type: Schema.Types.ObjectId, default: undefined },
+            }, { timestamps: { createdAt: true, updatedAt: false } })],
             default: [],
         },
         totalAmount: {
