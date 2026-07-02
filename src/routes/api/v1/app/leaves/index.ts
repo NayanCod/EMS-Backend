@@ -9,6 +9,7 @@ import {
   getLeaveSubmittedAdminTemplate,
   getLeaveReviewedEmployeeTemplate,
 } from '../../../../../utils/emailTemplates';
+import { notifyUser, notifyUsers } from '../../../../../services/notificationService';
 
 // Helper: Check if a date is a holiday or weekend
 export async function isHolidayOrWeekend(dateStr: string, organizationId: string): Promise<boolean> {
@@ -132,14 +133,16 @@ export default async function leaveRoutes(fastify: FastifyInstance) {
 
     const employeeName = user.name || 'An employee';
 
+    const adminIds = admins.map(a => a._id);
+    notifyUsers(adminIds, 'LEAVE_SUBMITTED', {
+      employeeName,
+      dayCount,
+      type,
+      startDate,
+      leaveId: leave._id.toString(),
+    });
+
     for (const admin of admins) {
-      if (admin.appNotificationsEnabled !== false) {
-        await Notification.create({
-          userId: admin._id,
-          title: 'New Leave Request',
-          message: `${employeeName} requested ${dayCount} day(s) of ${type} leave starting from ${startDate}.`
-        });
-      }
 
       if (admin.emailNotificationsEnabled !== false && admin.email) {
         const html = getLeaveSubmittedAdminTemplate(
@@ -302,16 +305,14 @@ export default async function leaveRoutes(fastify: FastifyInstance) {
     leave.reviewComment = comment || undefined;
     await leave.save();
 
-    // Notify employee
     const targetEmployee = leave.employeeId as any;
     if (targetEmployee) {
-      if (targetEmployee.appNotificationsEnabled !== false) {
-        await Notification.create({
-          userId: targetEmployee._id,
-          title: `Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'}`,
-          message: `Your leave request from ${leave.startDate} to ${leave.endDate} has been ${status}.`
-        });
-      }
+      notifyUser(targetEmployee._id, 'LEAVE_REVIEWED', {
+        status,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        leaveId: leave._id.toString(),
+      });
 
       if (targetEmployee.emailNotificationsEnabled !== false && targetEmployee.email) {
         const html = getLeaveReviewedEmployeeTemplate(

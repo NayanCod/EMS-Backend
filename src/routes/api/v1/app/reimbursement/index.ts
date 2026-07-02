@@ -10,6 +10,7 @@ import {
     getClaimSubmittedAdminTemplate,
     getClaimCommentTemplate,
 } from "../../../../../utils/emailTemplates";
+import { notifyUser, notifyUsers } from "../../../../../services/notificationService";
 
 const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
     // List my reimbursements
@@ -379,16 +380,15 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                         status: "ACTIVE"
                     });
 
-                    for (const admin of admins) {
-                        if (admin.appNotificationsEnabled !== false) {
-                            const notification = new Notification({
-                                userId: admin._id,
-                                title: "New Claim Submitted",
-                                message: `${employee.name} submitted a new claim "${reimbursement.title}" for ₹${reimbursement.totalAmount.toFixed(2)}`
-                            });
-                            await notification.save();
-                        }
+                    const adminIds = admins.map(a => a._id);
+                    notifyUsers(adminIds, 'REIMBURSEMENT_SUBMITTED', {
+                        employeeName: employee.name,
+                        title: reimbursement.title,
+                        amount: reimbursement.totalAmount,
+                        reimbursementId: reimbursement._id.toString(),
+                    });
 
+                    for (const admin of admins) {
                         if (admin.emailNotificationsEnabled !== false && admin.email) {
                             const html = getClaimSubmittedAdminTemplate(
                                 admin.name,
@@ -468,15 +468,11 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                     // Send to the author of the parent comment
                     const repliedUser = await User.findById(parentComment.userId).select("name email role emailNotificationsEnabled appNotificationsEnabled").lean();
                     if (repliedUser) {
-                        // In-app notification
-                        if (repliedUser.appNotificationsEnabled !== false) {
-                            const notification = new Notification({
-                                userId: repliedUser._id,
-                                title: "New reply on claim discussion",
-                                message: `${commenterName} replied: "${message}"`
-                            });
-                            await notification.save();
-                        }
+                        notifyUser(repliedUser._id, 'REIMBURSEMENT_COMMENT_REPLY', {
+                            commenterName,
+                            message,
+                            reimbursementId: reimbursement._id.toString(),
+                        });
                         // Email notification
                         if (repliedUser.emailNotificationsEnabled !== false && repliedUser.email) {
                             const html = getClaimCommentTemplate(repliedUser.name, commenterName, claimTitle, message, true);
@@ -497,15 +493,14 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                         role: "ADMIN",
                         status: "ACTIVE"
                     });
+                    const adminIds = admins.map(a => a._id);
+                    notifyUsers(adminIds, 'REIMBURSEMENT_COMMENT_NEW_ADMIN', {
+                        commenterName,
+                        message,
+                        reimbursementId: reimbursement._id.toString(),
+                    });
+
                     for (const admin of admins) {
-                        if (admin.appNotificationsEnabled !== false) {
-                            const notification = new Notification({
-                                userId: admin._id,
-                                title: "New claim discussion comment",
-                                message: `${commenterName} commented: "${message}"`
-                            });
-                            await notification.save();
-                        }
                         if (admin.emailNotificationsEnabled !== false && admin.email) {
                             const html = getClaimCommentTemplate(admin.name, commenterName, claimTitle, message, false);
                             sendMail({
@@ -518,14 +513,11 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                 } else if (isAdmin) {
                     // Notify the employee
                     if (employeeUser) {
-                        if (employeeUser.appNotificationsEnabled !== false) {
-                            const notification = new Notification({
-                                userId: employeeUser._id,
-                                title: "New claim discussion comment",
-                                message: `Admin ${commenterName} commented: "${message}"`
-                            });
-                            await notification.save();
-                        }
+                        notifyUser(employeeUser._id, 'REIMBURSEMENT_COMMENT_NEW_EMPLOYEE', {
+                            commenterName,
+                            message,
+                            reimbursementId: reimbursement._id.toString(),
+                        });
                         if (employeeUser.emailNotificationsEnabled !== false && employeeUser.email) {
                             const html = getClaimCommentTemplate(employeeUser.name, commenterName, claimTitle, message, false);
                             sendMail({

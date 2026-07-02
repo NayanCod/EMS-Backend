@@ -1,9 +1,9 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { Todo } from '../../../../../models/Todo';
-import { Notification } from '../../../../../models/Notification';
 import { User } from '../../../../../models/User';
 import { sendMail } from '../../../../../services/emailService';
 import { getTaskAssignedTemplate } from '../../../../../utils/emailTemplates';
+import { notifyUser } from '../../../../../services/notificationService';
 
 export default async function todoRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -46,15 +46,11 @@ export default async function todoRoutes(fastify: FastifyInstance) {
       if (assignedBy) {
         const targetUser = await User.findById(targetUserId).select('name email emailNotificationsEnabled appNotificationsEnabled').lean();
 
-        // In-app notification (if enabled)
-        if (targetUser?.appNotificationsEnabled !== false) {
-          const notification = new Notification({
-            userId: targetUserId,
-            title: 'New Task Assigned',
-            message: `You have been assigned a new task: "${task}" by ${assignerName}`
-          });
-          await notification.save();
-        }
+        // In-app & Push notification (fire-and-forget, error-isolated)
+        notifyUser(targetUserId, 'TASK_ASSIGNED', {
+          title: task,
+          assignedBy: assignerName,
+        });
 
         // Email notification (if enabled)
         if (targetUser?.emailNotificationsEnabled !== false && targetUser?.email) {

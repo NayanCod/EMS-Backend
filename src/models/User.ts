@@ -1,5 +1,19 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IPushToken {
+  token: string;
+  platform: 'ios' | 'android';
+  deviceId: string;
+  updatedAt: Date;
+}
+
+export interface INotificationPreferences {
+  tasks: boolean;
+  reimbursements: boolean;
+  leaves: boolean;
+  projects: boolean;
+}
+
 export interface IUser extends Document {
   name: string;
   email: string;
@@ -12,6 +26,9 @@ export interface IUser extends Document {
   department?: string;
   emailNotificationsEnabled: boolean;
   appNotificationsEnabled: boolean;
+  pushNotificationsEnabled: boolean;
+  pushTokens: IPushToken[];
+  notificationPreferences: INotificationPreferences;
   status: 'ACTIVE' | 'INACTIVE' | 'REMOVED';
   profileImage?: string;
 }
@@ -35,6 +52,19 @@ const UserSchema: Schema = new Schema({
   department: { type: String, trim: true },
   emailNotificationsEnabled: { type: Boolean, default: true },
   appNotificationsEnabled: { type: Boolean, default: true },
+  pushNotificationsEnabled: { type: Boolean, default: true },
+  pushTokens: [{
+    token: { type: String, required: true },
+    platform: { type: String, enum: ['ios', 'android'], required: true },
+    deviceId: { type: String, required: true },
+    updatedAt: { type: Date, default: Date.now }
+  }],
+  notificationPreferences: {
+    tasks: { type: Boolean, default: true },
+    reimbursements: { type: Boolean, default: true },
+    leaves: { type: Boolean, default: true },
+    projects: { type: Boolean, default: true }
+  },
   status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'REMOVED'], default: 'ACTIVE' },
   profileImage: { type: String },
 }, {

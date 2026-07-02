@@ -7,31 +7,30 @@ import { Notification } from '../../../../../models/Notification';
 import { sendMail } from '../../../../../services/emailService';
 import { getProjectAssignedTemplate, getProjectCommentTemplate } from '../../../../../utils/emailTemplates';
 import { createDownloadUrl } from '../../../../../services/s3Service';
+import { notifyUsers } from '../../../../../services/notificationService';
 
 async function notifyNewMembers(
   newMemberIds: string[],
   adminName: string,
+  projectId: string,
   projectName: string,
   projectDesc: string | undefined,
   dueDate: string | undefined
 ) {
   if (newMemberIds.length === 0) return;
 
+  // In-app & Push notification (fire-and-forget, error-isolated)
+  notifyUsers(newMemberIds, 'PROJECT_INVITED', {
+    projectId,
+    projectName,
+    adminName,
+  });
+
   const members = await User.find({ _id: { $in: newMemberIds } })
-    .select('name email emailNotificationsEnabled appNotificationsEnabled')
+    .select('name email emailNotificationsEnabled')
     .lean();
 
   for (const member of members) {
-    // In-app notification
-    if (member.appNotificationsEnabled !== false) {
-      const notification = new Notification({
-        userId: member._id,
-        title: 'Added to Project',
-        message: `You have been added to project: "${projectName}" by ${adminName}`,
-      });
-      await notification.save();
-    }
-
     // Email notification
     if (member.emailNotificationsEnabled !== false && member.email) {
       const html = getProjectAssignedTemplate(member.name, adminName, projectName, projectDesc, dueDate);
@@ -79,7 +78,7 @@ export default async function projectRoutes(fastify: FastifyInstance) {
     const creatorUser = await User.findById(user.id).select('name').lean();
     const adminName = creatorUser?.name || 'Admin';
     const newMemberIds = (members || []).filter((m: string) => m !== user.id);
-    await notifyNewMembers(newMemberIds, adminName, name, description, dueDate);
+    await notifyNewMembers(newMemberIds, adminName, project._id.toString(), name, description, dueDate);
 
     return reply.created({ message: 'Project created', project });
   });
@@ -291,7 +290,7 @@ export default async function projectRoutes(fastify: FastifyInstance) {
       if (newMemberIds.length > 0) {
         const creatorUser = await User.findById(user.id).select('name').lean();
         const adminName = creatorUser?.name || 'Admin';
-        await notifyNewMembers(newMemberIds, adminName, project.name, project.description, project.dueDate);
+        await notifyNewMembers(newMemberIds, adminName, project._id.toString(), project.name, project.description, project.dueDate);
       }
     }
 

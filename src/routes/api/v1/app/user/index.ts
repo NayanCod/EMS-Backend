@@ -77,6 +77,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
       designation,
       emailNotificationsEnabled,
       appNotificationsEnabled,
+      pushNotificationsEnabled,
+      notificationPreferences,
       profileImage,
     } = request.body as any;
 
@@ -94,6 +96,13 @@ export default async function userRoutes(fastify: FastifyInstance) {
     if (designation) user.designation = designation;
     if (emailNotificationsEnabled !== undefined) user.emailNotificationsEnabled = emailNotificationsEnabled;
     if (appNotificationsEnabled !== undefined) user.appNotificationsEnabled = appNotificationsEnabled;
+    if (pushNotificationsEnabled !== undefined) user.pushNotificationsEnabled = pushNotificationsEnabled;
+    if (notificationPreferences !== undefined) {
+      user.notificationPreferences = {
+        ...user.notificationPreferences,
+        ...notificationPreferences
+      };
+    }
 
     // Handle profile image update & deletion of previous S3 image
     if (profileImage !== undefined) {
@@ -137,6 +146,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
         designation: user.designation,
         emailNotificationsEnabled: user.emailNotificationsEnabled,
         appNotificationsEnabled: user.appNotificationsEnabled,
+        pushNotificationsEnabled: (user as any).pushNotificationsEnabled,
+        notificationPreferences: (user as any).notificationPreferences,
         profileImage: user.profileImage,
         profileImageUrl,
       }

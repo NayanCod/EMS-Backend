@@ -10,6 +10,7 @@ import { createDownloadUrl } from '../../../../../services/s3Service';
 import { Notification } from '../../../../../models/Notification';
 import { sendMail } from '../../../../../services/emailService';
 import { getClaimReviewedEmployeeTemplate } from '../../../../../utils/emailTemplates';
+import { notifyUser } from '../../../../../services/notificationService';
 
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -592,20 +593,17 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     await reimbursement.save();
 
-    // Notify the employee
+    // Notify the employee (fire-and-forget, error-isolated)
+    notifyUser(reimbursement.userId, 'REIMBURSEMENT_REVIEWED', {
+      title: reimbursement.title,
+      action,
+      reimbursementId: reimbursement._id.toString(),
+    });
+
     try {
-      const employee = await User.findById(reimbursement.userId).select('name email emailNotificationsEnabled appNotificationsEnabled').lean() as any;
+      const employee = await User.findById(reimbursement.userId).select('name email emailNotificationsEnabled').lean() as any;
       if (employee) {
         const actionLabel = action === 'approve' ? 'approved' : 'rejected';
-        // In-app notification
-        if (employee.appNotificationsEnabled !== false) {
-          const notification = new Notification({
-            userId: employee._id,
-            title: `Claim ${actionLabel === 'approved' ? 'Approved' : 'Rejected'}`,
-            message: `Your claim "${reimbursement.title}" has been ${actionLabel} by Admin.`
-          });
-          await notification.save();
-        }
         // Email notification
         if (employee.emailNotificationsEnabled !== false && employee.email) {
           const html = getClaimReviewedEmployeeTemplate(
@@ -623,7 +621,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         }
       }
     } catch (err) {
-      console.error("Failed to send claim review notification to employee:", err);
+      console.error("Failed to send claim review email to employee:", err);
     }
 
     return reply.ok({ reimbursement });

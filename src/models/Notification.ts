@@ -5,6 +5,8 @@ export interface INotification extends Document {
   title: string;
   message: string;
   status: 'unread' | 'read';
+  type?: string;
+  data?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -14,6 +16,8 @@ const NotificationSchema: Schema = new Schema({
   title: { type: String, required: true, trim: true },
   message: { type: String, required: true, trim: true },
   status: { type: String, enum: ['unread', 'read'], default: 'unread', required: true },
+  type: { type: String },
+  data: { type: Schema.Types.Mixed },
 }, {
   timestamps: true,
 });
