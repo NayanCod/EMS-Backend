@@ -1,6 +1,6 @@
 export interface IEmployeeDailyRecord {
   name: string;
-  status: 'Present' | 'Absent';
+  status: string;
   checkIn: string;
   checkOut: string;
   completedTasks: string[];
@@ -12,6 +12,7 @@ export interface IEmployeeMonthlyRecord {
   presentDays: number;
   totalDays: number;
   attendanceRate: number;
+  leaveDaysTaken: number;
   completedTasksCount: number;
   pendingTasksCount: number;
 }
@@ -156,22 +157,29 @@ export function getProjectAssignedTemplate(
 
 export function getDailyReportTemplate(date: string, orgName: string, records: IEmployeeDailyRecord[]): string {
   let tableRowsHtml = '';
-  
+
   if (records.length === 0) {
     tableRowsHtml = `<tr><td colspan="4" style="${tdStyle} text-align: center; color: #888888;">No employees in organization.</td></tr>`;
   } else {
     for (const rec of records) {
-      const completedList = rec.completedTasks.length > 0 
+      const completedList = rec.completedTasks.length > 0
         ? `<ul style="margin: 0; padding-left: 16px;">${rec.completedTasks.map(t => `<li>${t}</li>`).join('')}</ul>`
         : '<span style="color: #888888; font-size: 12px;">None</span>';
 
-      const pendingList = rec.pendingTasks.length > 0 
+      const pendingList = rec.pendingTasks.length > 0
         ? `<ul style="margin: 0; padding-left: 16px;">${rec.pendingTasks.map(t => `<li>${t}</li>`).join('')}</ul>`
         : '<span style="color: #888888; font-size: 12px;">None</span>';
 
-      const attendanceStatus = rec.status === 'Present'
-        ? `<span style="color: #2e7d32; font-weight: bold;">Present</span><br/><span style="font-size: 11px; color: #666666;">In: ${rec.checkIn}<br/>Out: ${rec.checkOut}</span>`
-        : `<span style="color: #c62828; font-weight: bold;">Absent</span>`;
+      let attendanceStatus = '';
+      if (rec.status.startsWith('Present')) {
+        attendanceStatus = `<span style="color: #2e7d32; font-weight: bold;">${rec.status}</span><br/><span style="font-size: 11px; color: #666666;">In: ${rec.checkIn}<br/>Out: ${rec.checkOut}</span>`;
+      } else if (rec.status.startsWith('On Leave')) {
+        attendanceStatus = `<span style="color: #0058be; font-weight: bold;">${rec.status}</span>`;
+      } else if (rec.status === 'Holiday') {
+        attendanceStatus = `<span style="color: #e65100; font-weight: bold;">Holiday</span>`;
+      } else {
+        attendanceStatus = `<span style="color: #c62828; font-weight: bold;">Absent</span>`;
+      }
 
       tableRowsHtml += `
         <tr>
@@ -230,6 +238,7 @@ export function getMonthlyReportTemplate(monthName: string, orgName: string, rec
             <br/>
             <span style="font-size: 11px; color: #666666;">Present: ${rec.presentDays}/${rec.totalDays} days</span>
           </td>
+          <td style="${tdStyle}; font-weight: bold; color: #0058be;">${rec.leaveDaysTaken} day${rec.leaveDaysTaken !== 1 ? 's' : ''}</td>
           <td style="${tdStyle}; color: #2e7d32; font-weight: bold;">${rec.completedTasksCount}</td>
           <td style="${tdStyle}; color: #e65100; font-weight: bold;">${rec.pendingTasksCount}</td>
         </tr>
@@ -250,10 +259,11 @@ export function getMonthlyReportTemplate(monthName: string, orgName: string, rec
         <table style="${tableStyle}">
           <thead>
             <tr>
-              <th style="${thStyle}; width: 30%;">Employee</th>
-              <th style="${thStyle}; width: 30%;">Monthly Attendance</th>
-              <th style="${thStyle}; width: 20%;">Tasks Completed</th>
-              <th style="${thStyle}; width: 20%;">Tasks Pending</th>
+              <th style="${thStyle}; width: 25%;">Employee</th>
+              <th style="${thStyle}; width: 25%;">Monthly Attendance</th>
+              <th style="${thStyle}; width: 18%;">Leaves Taken</th>
+              <th style="${thStyle}; width: 16%;">Tasks Completed</th>
+              <th style="${thStyle}; width: 16%;">Tasks Pending</th>
             </tr>
           </thead>
           <tbody>
@@ -507,6 +517,83 @@ export function getProjectCommentTemplate(
         
         <div style="text-align: center; margin-top: 24px;">
           <a href="empapp://projects" style="${buttonStyle}">View Project Discussion</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification. Please do not reply directly to this email.
+      </div>
+    </div>
+  `;
+}
+
+export function getLeaveSubmittedAdminTemplate(
+  adminName: string,
+  employeeName: string,
+  leaveType: string,
+  startDate: string,
+  endDate: string,
+  dayCount: number,
+  reason: string
+): string {
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}">
+        <h1 style="margin: 0; font-size: 20px;">New Leave Request</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${adminName}</strong>,</p>
+        <p>A new leave request has been submitted by <strong>${employeeName}</strong> and requires your review.</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0;"><strong>Leave Type:</strong> ${leaveType}</p>
+          <p style="margin: 0 0 8px 0;"><strong>Duration:</strong> ${startDate} to ${endDate} (${dayCount} day${dayCount > 1 ? 's' : ''})</p>
+          <p style="margin: 0;"><strong>Reason:</strong> ${reason}</p>
+        </div>
+        
+        <p>Please review and approve/reject this request in the admin panel.</p>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://leaves" style="${buttonStyle}">Review Leaves</a>
+        </div>
+      </div>
+      <div style="${footerStyle}">
+        This is an automated notification from Cluix Admin Services.
+      </div>
+    </div>
+  `;
+}
+
+export function getLeaveReviewedEmployeeTemplate(
+  employeeName: string,
+  status: string,
+  leaveType: string,
+  startDate: string,
+  endDate: string,
+  dayCount: number,
+  adminComment?: string
+): string {
+  const statusColor = status === 'approved' ? '#2e7d32' : '#c62828';
+  const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+  const commentHtml = adminComment ? `<p style="margin: 8px 0 0 0;"><strong>Admin Comment:</strong> ${adminComment}</p>` : '';
+
+  return `
+    <div style="${emailContainerStyle}">
+      <div style="${emailHeaderStyle}; background-color: ${statusColor};">
+        <h1 style="margin: 0; font-size: 20px;">Leave Request ${statusLabel}</h1>
+      </div>
+      <div style="${emailBodyStyle}">
+        <p>Hi <strong>${employeeName}</strong>,</p>
+        <p>Your leave request has been <strong>${status}</strong>.</p>
+        
+        <div style="background-color: #f9f9f9; border-left: 4px solid ${statusColor}; padding: 16px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0;"><strong>Leave Type:</strong> ${leaveType}</p>
+          <p style="margin: 0 0 8px 0;"><strong>Duration:</strong> ${startDate} to ${endDate} (${dayCount} day${dayCount > 1 ? 's' : ''})</p>
+          <p style="margin: 0 0 8px 0;"><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span></p>
+          ${commentHtml}
+        </div>
+        
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="empapp://leaves" style="${buttonStyle}">View Leave Details</a>
         </div>
       </div>
       <div style="${footerStyle}">

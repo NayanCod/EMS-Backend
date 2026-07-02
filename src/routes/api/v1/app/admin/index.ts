@@ -290,11 +290,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
   fastify.put('/organization', async (request, reply) => {
     const admin = request.user as any;
-    const { name, addressName, location, radius, workStartTime, workEndTime } = request.body as any;
+    const { name, addressName, location, radius, workStartTime, workEndTime, leaveTypes } = request.body as any;
 
     const updateData: any = { name, addressName, location, radius };
     if (workStartTime !== undefined) updateData.workStartTime = workStartTime;
     if (workEndTime !== undefined) updateData.workEndTime = workEndTime;
+    if (leaveTypes !== undefined) updateData.leaveTypes = leaveTypes;
 
     const organization = await Organization.findByIdAndUpdate(
       admin.organizationId,

@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { Attendance } from '../../../../../models/Attendance';
 import { Organization } from '../../../../../models/Organization';
+import { Leave } from '../../../../../models/Leave';
+import { Holiday } from '../../../../../models/Holiday';
 
 export default async function attendanceRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -15,6 +17,17 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     }
 
     const today = new Date().toISOString().split('T')[0];
+
+    // Check if on approved leave today
+    const onLeave = await Leave.findOne({
+      employeeId: user.id,
+      startDate: { $lte: today },
+      endDate: { $gte: today },
+      status: 'approved'
+    });
+    if (onLeave) {
+      return reply.badRequest('ON_APPROVED_LEAVE', "You're on approved leave today");
+    }
 
     // Check if already checked in today
     const existing = await Attendance.findOne({ userId: user.id, date: today });
@@ -104,6 +117,17 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       date: { $gte: startDateStr, $lte: todayStr }
     }).lean();
 
+    const leaves = await Leave.find({
+      employeeId: user.id,
+      status: 'approved',
+      startDate: { $lte: todayStr },
+      endDate: { $gte: startDateStr }
+    }).lean();
+
+    const holidays = await Holiday.find({
+      organizationId: user.organizationId
+    }).lean();
+
     const attendanceMap = new Map();
     for (const record of attendanceRecords) {
       attendanceMap.set(record.date, record);
@@ -113,7 +137,12 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     for (let i = 0; i < limitDays; i++) {
       const d = new Date();
       d.setDate(today.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      
       const record = attendanceMap.get(dateStr);
 
       if (record) {
@@ -125,13 +154,34 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
           status: 'present',
         });
       } else {
+        const monthDay = dateStr.slice(5); // "MM-DD"
+        const holidayRecord = holidays.find((h: any) => h.date === dateStr || (h.recurring && h.date.slice(5) === monthDay));
+        const leaveRecord = leaves.find((l: any) => dateStr >= l.startDate && dateStr <= l.endDate);
+
         const dayOfWeek = d.getDay();
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        allItems.push({
-          _id: `absent-${dateStr}`,
-          date: dateStr,
-          status: isWeekend ? 'off-day' : 'absent',
-        });
+
+        if (leaveRecord) {
+          allItems.push({
+            _id: `leave-${dateStr}`,
+            date: dateStr,
+            status: 'leave',
+            leaveType: leaveRecord.type,
+          });
+        } else if (holidayRecord) {
+          allItems.push({
+            _id: `holiday-${dateStr}`,
+            date: dateStr,
+            status: 'holiday',
+            holidayName: holidayRecord.name,
+          });
+        } else {
+          allItems.push({
+            _id: `absent-${dateStr}`,
+            date: dateStr,
+            status: isWeekend ? 'off-day' : 'absent',
+          });
+        }
       }
     }
 
