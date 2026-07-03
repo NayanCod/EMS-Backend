@@ -215,7 +215,20 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       .select('date checkInTime checkOutTime')
       .lean();
 
-    return reply.ok({ records });
+    const startOfMonth = `${targetYear}-${monthStr}-01`;
+    const lastDay = new Date(targetYear, targetMonth, 0).getDate();
+    const endOfMonth = `${targetYear}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
+    const leaves = await Leave.find({
+      employeeId: user.id,
+      status: 'approved',
+      startDate: { $lte: endOfMonth },
+      endDate: { $gte: startOfMonth }
+    })
+      .select('startDate endDate type')
+      .lean();
+
+    return reply.ok({ records, leaves });
   });
 
 
