@@ -12,6 +12,7 @@ export interface INotificationPreferences {
   reimbursements: boolean;
   leaves: boolean;
   projects: boolean;
+  announcements: boolean;
 }
 
 export interface IUser extends Document {
@@ -63,7 +64,8 @@ const UserSchema: Schema = new Schema({
     tasks: { type: Boolean, default: true },
     reimbursements: { type: Boolean, default: true },
     leaves: { type: Boolean, default: true },
-    projects: { type: Boolean, default: true }
+    projects: { type: Boolean, default: true },
+    announcements: { type: Boolean, default: true }
   },
   status: { type: String, enum: ['ACTIVE', 'INACTIVE', 'REMOVED'], default: 'ACTIVE' },
   profileImage: { type: String },

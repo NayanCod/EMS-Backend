@@ -1,4 +1,4 @@
-export type NotificationCategory = 'tasks' | 'reimbursements' | 'leaves' | 'projects';
+export type NotificationCategory = 'tasks' | 'reimbursements' | 'leaves' | 'projects' | 'announcements';
 
 export type NotificationType =
   | 'TASK_ASSIGNED'
@@ -9,7 +9,8 @@ export type NotificationType =
   | 'REIMBURSEMENT_COMMENT_NEW_EMPLOYEE'
   | 'REIMBURSEMENT_REVIEWED'
   | 'LEAVE_SUBMITTED'
-  | 'LEAVE_REVIEWED';
+  | 'LEAVE_REVIEWED'
+  | 'ANNOUNCEMENT';
 
 export interface NotificationRegistryEntry {
   category: NotificationCategory;
@@ -72,6 +73,12 @@ export const NOTIFICATION_REGISTRY: Record<NotificationType, NotificationRegistr
     title: (data) => `Leave Request ${data.status === 'approved' ? 'Approved' : 'Rejected'}`,
     message: (data) => `Your leave request from ${data.startDate} to ${data.endDate} has been ${data.status}.`,
     link: (data) => `/leaves/${data.leaveId}`,
+  },
+  ANNOUNCEMENT: {
+    category: 'announcements',
+    title: (data) => data.title || 'New Announcement',
+    message: (data) => data.message || data.body || '',
+    link: (data) => `/announcements/${data.announcementId}`,
   },
 };
 
