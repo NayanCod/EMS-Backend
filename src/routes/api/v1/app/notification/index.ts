@@ -1,39 +1,138 @@
 import { FastifyInstance } from 'fastify';
 import { Notification } from '../../../../../models/Notification';
 import { User } from '../../../../../models/User';
+import { NOTIFICATION_REGISTRY, getNotificationConfig, NotificationType } from '../../../../../services/notificationRegistry';
 
 export default async function notificationRoutes(fastify: FastifyInstance) {
   // Protect all notification routes
   fastify.addHook('preValidation', fastify.authenticate);
 
-  // Fetch notifications with optional status filtering
+  // Fetch notifications with pagination, category, and read filtering
   fastify.get('/', async (request, reply) => {
     const user = request.user as any;
-    const { status } = request.query as any;
+    const { page = 1, limit = 20, category, read } = request.query as any;
 
     const query: any = { userId: user.id };
-    if (status === 'unread' || status === 'read') {
-      query.status = status;
-    } else if (status !== 'all') {
-      // Default to unread for backwards compatibility if no status param is provided
+
+    // Filter by read status
+    if (read === 'true') {
+      query.status = 'read';
+    } else if (read === 'false') {
       query.status = 'unread';
+    } else if (read === 'all') {
+      // no status filter
+    } else {
+      // Fallback/backward compatibility with legacy "status" query param
+      const { status } = request.query as any;
+      if (status === 'unread' || status === 'read') {
+        query.status = status;
+      } else if (status !== 'all') {
+        // Default to unread for backwards compatibility if no read status param is provided
+        query.status = 'unread';
+      }
     }
 
-    const notifications = await Notification.find(query).sort({ createdAt: -1 });
+    // Filter by category
+    if (category && category !== 'all') {
+      const matchingTypes = Object.keys(NOTIFICATION_REGISTRY).filter((key) => {
+        return NOTIFICATION_REGISTRY[key as NotificationType].category === category;
+      });
+      query.type = { $in: matchingTypes };
+    }
 
-    return reply.ok({ notifications });
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const total = await Notification.countDocuments(query);
+    const notifications = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    const notificationsWithLinks = notifications.map((n) => {
+      let link = null;
+      let resolvedCategory = null;
+      try {
+        if (n.type) {
+          const config = getNotificationConfig(n.type as any, n.data || {});
+          link = config.link;
+          resolvedCategory = config.category;
+        }
+      } catch (e) {
+        // ignore resolving errors for malformed or custom notifications
+      }
+
+      return {
+        ...n.toObject(),
+        link,
+        category: resolvedCategory || n.type?.toLowerCase() || null,
+      };
+    });
+
+    return reply.ok({
+      notifications: notificationsWithLinks,
+      total,
+      page: pageNum,
+      limit: limitNum,
+    });
   });
 
-  // Mark all notifications as read
+  // Get unread notification counts globally and grouped by category
+  fastify.get('/unread-count', async (request, reply) => {
+    const user = request.user as any;
+    const notifications = await Notification.find({ userId: user.id, status: 'unread' });
+
+    const total = notifications.length;
+    const byCategory: Record<string, number> = {
+      tasks: 0,
+      reimbursements: 0,
+      leaves: 0,
+      projects: 0,
+      announcements: 0,
+      schedule: 0,
+    };
+
+    notifications.forEach((n) => {
+      if (n.type) {
+        try {
+          const entry = NOTIFICATION_REGISTRY[n.type as NotificationType];
+          if (entry && entry.category) {
+            byCategory[entry.category] = (byCategory[entry.category] || 0) + 1;
+          }
+        } catch (e) {
+          // ignore resolving errors
+        }
+      }
+    });
+
+    return reply.ok({
+      total,
+      byCategory,
+    });
+  });
+
+  // Mark all notifications (or all in a specific category) as read
   fastify.patch('/read-all', async (request, reply) => {
     const user = request.user as any;
+    const { category } = request.query as { category?: string };
 
+    const query: any = { userId: user.id, status: 'unread' };
+
+    if (category && category !== 'all') {
+      const matchingTypes = Object.keys(NOTIFICATION_REGISTRY).filter((key) => {
+        return NOTIFICATION_REGISTRY[key as NotificationType].category === category;
+      });
+      query.type = { $in: matchingTypes };
+    }
+
+    const now = new Date();
     await Notification.updateMany(
-      { userId: user.id, status: 'unread' },
-      { status: 'read' }
+      query,
+      { status: 'read', readAt: now }
     );
 
-    return reply.ok({ message: 'All notifications marked as read' });
+    return reply.ok({ message: 'Notifications marked as read' });
   });
 
   // Mark notification as read
@@ -51,6 +150,7 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     }
 
     notification.status = 'read';
+    notification.readAt = new Date();
     await notification.save();
 
     return reply.ok({ message: 'Notification marked as read', notification });
