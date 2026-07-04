@@ -94,13 +94,13 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     if (earliestRecord) {
       const [ey, em, ed] = earliestRecord.date.split('-').map(Number);
       const earliestDate = new Date(ey, em - 1, ed);
-      
+
       const now = new Date();
       const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
+
       const diffTime = todayDate.getTime() - earliestDate.getTime();
       const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-      
+
       limitDays = Math.max(1, diffDays);
     } else {
       limitDays = 1;
@@ -137,12 +137,12 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     for (let i = 0; i < limitDays; i++) {
       const d = new Date();
       d.setDate(today.getDate() - i);
-      
+
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const dd = String(d.getDate()).padStart(2, '0');
       const dateStr = `${yyyy}-${mm}-${dd}`;
-      
+
       const record = attendanceMap.get(dateStr);
 
       if (record) {

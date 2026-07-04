@@ -24,6 +24,18 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     return reply.ok({ notifications });
   });
 
+  // Mark all notifications as read
+  fastify.patch('/read-all', async (request, reply) => {
+    const user = request.user as any;
+
+    await Notification.updateMany(
+      { userId: user.id, status: 'unread' },
+      { status: 'read' }
+    );
+
+    return reply.ok({ message: 'All notifications marked as read' });
+  });
+
   // Mark notification as read
   fastify.patch('/:id/read', async (request, reply) => {
     const user = request.user as any;

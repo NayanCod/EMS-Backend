@@ -29,7 +29,7 @@ try {
  * Sends a notification to a single user.
  * Error isolated - will never throw upwards.
  */
-export async function notifyUser(userId: any, type: NotificationType, data: any): Promise<void> {
+export async function notifyUser(userId: any, type: NotificationType, data: any, saveInDb = true): Promise<void> {
   try {
     const config = getNotificationConfig(type, data);
     const user = await User.findById(userId).lean();
@@ -38,8 +38,8 @@ export async function notifyUser(userId: any, type: NotificationType, data: any)
       return;
     }
 
-    // 1. Create in-app notification if appNotificationsEnabled is not false
-    if (user.appNotificationsEnabled !== false) {
+    // 1. Create in-app notification if appNotificationsEnabled is not false and saveInDb is true
+    if (user.appNotificationsEnabled !== false && saveInDb) {
       try {
         const notification = new Notification({
           userId: user._id,
@@ -154,7 +154,7 @@ export async function notifyUser(userId: any, type: NotificationType, data: any)
  * gathers push tokens, chunks them into batches of 500, and sends via Firebase Admin.
  * Error isolated - will never throw upwards.
  */
-export async function notifyUsers(userIds: any[], type: NotificationType, data: any): Promise<void> {
+export async function notifyUsers(userIds: any[], type: NotificationType, data: any, saveInDb = true): Promise<void> {
   try {
     const config = getNotificationConfig(type, data);
     const users = await User.find({ _id: { $in: userIds } }).lean();
@@ -168,8 +168,8 @@ export async function notifyUsers(userIds: any[], type: NotificationType, data: 
     let inAppCount = 0;
 
     for (const user of users) {
-      // 1. Create in-app notification if appNotificationsEnabled is not false
-      if (user.appNotificationsEnabled !== false) {
+      // 1. Create in-app notification if appNotificationsEnabled is not false and saveInDb is true
+      if (user.appNotificationsEnabled !== false && saveInDb) {
         try {
           const notification = new Notification({
             userId: user._id,

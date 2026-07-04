@@ -1,4 +1,4 @@
-export type NotificationCategory = 'tasks' | 'reimbursements' | 'leaves' | 'projects' | 'announcements';
+export type NotificationCategory = 'tasks' | 'reimbursements' | 'leaves' | 'projects' | 'announcements' | 'schedule';
 
 export type NotificationType =
   | 'TASK_ASSIGNED'
@@ -10,7 +10,12 @@ export type NotificationType =
   | 'REIMBURSEMENT_REVIEWED'
   | 'LEAVE_SUBMITTED'
   | 'LEAVE_REVIEWED'
-  | 'ANNOUNCEMENT';
+  | 'ANNOUNCEMENT'
+  | 'WORK_START_REMINDER'
+  | 'LUNCH_BREAK_REMINDER'
+  | 'WORK_END_REMINDER'
+  | 'LATE_CHECKIN_WARNING'
+  | 'FORGOT_CHECKOUT_WARNING';
 
 export interface NotificationRegistryEntry {
   category: NotificationCategory;
@@ -79,6 +84,36 @@ export const NOTIFICATION_REGISTRY: Record<NotificationType, NotificationRegistr
     title: (data) => data.title || 'New Announcement',
     message: (data) => data.message || data.body || '',
     link: (data) => `/announcements/${data.announcementId}`,
+  },
+  WORK_START_REMINDER: {
+    category: 'schedule',
+    title: 'Work Day Starting Soon! ☕',
+    message: (data) => data.message || 'Office is about to start. Time to check in!',
+    link: (data) => `/home`,
+  },
+  LUNCH_BREAK_REMINDER: {
+    category: 'schedule',
+    title: 'Lunch Break Time! 🍔',
+    message: (data) => data.message || 'Take a break and grab some lunch!',
+    link: (data) => `/home`,
+  },
+  WORK_END_REMINDER: {
+    category: 'schedule',
+    title: 'Work Day Ending Soon! 🌅',
+    message: (data) => data.message || 'Don\'t forget to check out!',
+    link: (data) => `/home`,
+  },
+  LATE_CHECKIN_WARNING: {
+    category: 'schedule',
+    title: 'Running Late? ⏰',
+    message: (data) => data.message || 'You haven\'t checked in yet today.',
+    link: (data) => `/home`,
+  },
+  FORGOT_CHECKOUT_WARNING: {
+    category: 'schedule',
+    title: 'Forgot to Check Out? 🏢',
+    message: (data) => data.message || 'It looks like you are still checked in.',
+    link: (data) => `/home`,
   },
 };
 
