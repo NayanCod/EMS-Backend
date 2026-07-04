@@ -8,6 +8,7 @@ import { sendMail } from '../../../../../services/emailService';
 import { getProjectAssignedTemplate, getProjectCommentTemplate } from '../../../../../utils/emailTemplates';
 import { createDownloadUrl } from '../../../../../services/s3Service';
 import { notifyUsers } from '../../../../../services/notificationService';
+import { logAction } from '../../../../../services/auditService';
 
 async function notifyNewMembers(
   newMemberIds: string[],
@@ -74,10 +75,41 @@ export default async function projectRoutes(fastify: FastifyInstance) {
 
     await project.save();
 
+    // Log project creation to audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'PROJECT_CREATED',
+      targetType: 'Project',
+      targetId: project._id,
+      metadata: {
+        projectName: project.name,
+        description: project.description
+      }
+    });
+
+    // Log PROJECT_MEMBER_ADDED for each added member during creation
+    const newMemberIds = (members || []).filter((m: string) => m !== user.id);
+    for (const memberId of newMemberIds) {
+      const memberUser = await User.findById(memberId).select('name').lean();
+      logAction({
+        organizationId: user.organizationId,
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'PROJECT_MEMBER_ADDED',
+        targetType: 'Project',
+        targetId: project._id,
+        metadata: {
+          projectName: project.name,
+          employeeName: memberUser?.name || 'Unknown Employee'
+        }
+      });
+    }
+
     // Notify newly added members (exclude the creator)
     const creatorUser = await User.findById(user.id).select('name').lean();
     const adminName = creatorUser?.name || 'Admin';
-    const newMemberIds = (members || []).filter((m: string) => m !== user.id);
     await notifyNewMembers(newMemberIds, adminName, project._id.toString(), name, description, dueDate);
 
     return reply.created({ message: 'Project created', project });
@@ -284,13 +316,30 @@ export default async function projectRoutes(fastify: FastifyInstance) {
 
     await project.save();
 
-    // Notify only the newly added members
+    // Notify and log only the newly added members
     if (members) {
       const newMemberIds = members.filter((m: string) => !previousMemberIds.includes(m) && m !== user.id);
       if (newMemberIds.length > 0) {
         const creatorUser = await User.findById(user.id).select('name').lean();
         const adminName = creatorUser?.name || 'Admin';
         await notifyNewMembers(newMemberIds, adminName, project._id.toString(), project.name, project.description, project.dueDate);
+
+        // Log project member added for each newly added member on updates
+        for (const memberId of newMemberIds) {
+          const memberUser = await User.findById(memberId).select('name').lean();
+          logAction({
+            organizationId: user.organizationId,
+            actorId: user.id,
+            actorRole: user.role,
+            action: 'PROJECT_MEMBER_ADDED',
+            targetType: 'Project',
+            targetId: project._id,
+            metadata: {
+              projectName: project.name,
+              employeeName: memberUser?.name || 'Unknown Employee'
+            }
+          });
+        }
       }
     }
 
@@ -333,6 +382,19 @@ export default async function projectRoutes(fastify: FastifyInstance) {
     if (user.role !== 'ADMIN' && project.createdBy.toString() !== user.id) {
       return reply.forbidden('403', 'Only admin or project creator can delete the project');
     }
+
+    // Log project deletion to audit log before actually deleting
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'PROJECT_DELETED',
+      targetType: 'Project',
+      targetId: project._id,
+      metadata: {
+        projectName: project.name
+      }
+    });
 
     await Project.deleteOne({ _id: id });
     await Todo.deleteMany({ projectId: id });

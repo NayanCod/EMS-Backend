@@ -11,6 +11,7 @@ import { Notification } from '../../../../../models/Notification';
 import { sendMail } from '../../../../../services/emailService';
 import { getClaimReviewedEmployeeTemplate } from '../../../../../utils/emailTemplates';
 import { notifyUser } from '../../../../../services/notificationService';
+import { logAction } from '../../../../../services/auditService';
 
 
 export default async function adminRoutes(fastify: FastifyInstance) {
@@ -44,6 +45,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     const user = await User.findOne({ _id: id, organizationId: admin.organizationId });
     if (!user) return reply.notFound('Employee not found');
 
+    const oldStatus = user.status;
     if (name) user.name = name;
     if (email) user.email = email;
     if (phoneNumber !== undefined) user.phoneNumber = phoneNumber;
@@ -54,6 +56,37 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     if (status !== undefined) user.status = status;
 
     await user.save();
+
+    // Log to audit log
+    if (status === 'INACTIVE' && oldStatus !== 'INACTIVE') {
+      logAction({
+        organizationId: admin.organizationId,
+        actorId: admin._id,
+        actorRole: 'ADMIN',
+        action: 'EMPLOYEE_SUSPENDED',
+        targetType: 'User',
+        targetId: user._id,
+        metadata: {
+          employeeName: user.name,
+          employeeEmail: user.email,
+        }
+      });
+    } else {
+      logAction({
+        organizationId: admin.organizationId,
+        actorId: admin._id,
+        actorRole: 'ADMIN',
+        action: 'EMPLOYEE_EDITED',
+        targetType: 'User',
+        targetId: user._id,
+        metadata: {
+          employeeName: user.name,
+          employeeEmail: user.email,
+          updatedFields: Object.keys(request.body as any).filter(k => k !== 'password')
+        }
+      });
+    }
+
     return reply.ok({ message: 'Employee updated successfully' });
   });
 
@@ -305,6 +338,21 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     );
 
     if (!organization) return reply.notFound('Organization not found');
+
+    // Log organization settings update to audit log
+    logAction({
+      organizationId: admin.organizationId,
+      actorId: admin._id,
+      actorRole: 'ADMIN',
+      action: 'ORGANIZATION_SETTINGS_UPDATED',
+      targetType: 'Organization',
+      targetId: organization._id,
+      metadata: {
+        organizationName: organization.name,
+        updatedFields: Object.keys(updateData)
+      }
+    });
+
     return reply.ok({ message: 'Organization updated successfully', organization });
   });
 
@@ -593,6 +641,26 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
     await reimbursement.save();
 
+    // Fetch employee info for notification and audit logging
+    const employee = await User.findById(reimbursement.userId).select('name email emailNotificationsEnabled').lean() as any;
+
+    // Log the review action to the audit log
+    logAction({
+      organizationId: admin.organizationId,
+      actorId: admin._id,
+      actorRole: 'ADMIN',
+      action: action === 'approve' ? 'REIMBURSEMENT_APPROVED' : 'REIMBURSEMENT_REJECTED',
+      targetType: 'Reimbursement',
+      targetId: reimbursement._id,
+      metadata: {
+        employeeName: employee?.name || 'Unknown Employee',
+        reimbursementTitle: reimbursement.title,
+        amount: reimbursement.totalAmount,
+        adminNote: reimbursement.adminNote,
+        referenceNumber: reimbursement.referenceNumber
+      }
+    });
+
     // Notify the employee (fire-and-forget, error-isolated)
     notifyUser(reimbursement.userId, 'REIMBURSEMENT_REVIEWED', {
       title: reimbursement.title,
@@ -601,7 +669,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     });
 
     try {
-      const employee = await User.findById(reimbursement.userId).select('name email emailNotificationsEnabled').lean() as any;
       if (employee) {
         const actionLabel = action === 'approve' ? 'approved' : 'rejected';
         // Email notification

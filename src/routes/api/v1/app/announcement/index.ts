@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Announcement } from '../../../../../models/Announcement';
 import { User } from '../../../../../models/User';
 import { notifyUsers } from '../../../../../services/notificationService';
+import { logAction } from '../../../../../services/auditService';
 import mongoose from 'mongoose';
 
 export default async function announcementRoutes(fastify: FastifyInstance) {
@@ -36,6 +37,21 @@ export default async function announcementRoutes(fastify: FastifyInstance) {
     });
 
     await announcement.save();
+
+    // Log the announcement to the audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: 'ADMIN',
+      action: 'ANNOUNCEMENT_SENT',
+      targetType: 'Announcement',
+      targetId: announcement._id,
+      metadata: {
+        announcementTitle: announcement.title,
+        recipientScope: announcement.recipientScope,
+        category: announcement.category
+      }
+    });
 
     // Determine targeted recipient IDs to send notification to
     let recipients: string[] = [];

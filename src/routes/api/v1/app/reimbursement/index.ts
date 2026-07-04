@@ -11,6 +11,7 @@ import {
     getClaimCommentTemplate,
 } from "../../../../../utils/emailTemplates";
 import { notifyUser, notifyUsers } from "../../../../../services/notificationService";
+import { logAction } from "../../../../../services/auditService";
 
 const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
     // List my reimbursements
@@ -354,6 +355,23 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
 
             await reimbursement.save();
 
+            // Log reimbursement submission to the audit log
+            const totalAmount = reimbursement.items?.reduce((s: number, i: any) => s + (i.amount || 0), 0) || 0;
+            logAction({
+                organizationId: request.user.organizationId,
+                actorId: request.user.id || request.user._id,
+                actorRole: request.user.role,
+                action: 'REIMBURSEMENT_SUBMITTED',
+                targetType: 'Reimbursement',
+                targetId: reimbursement._id,
+                metadata: {
+                    employeeName: request.user.name,
+                    title: reimbursement.title,
+                    totalAmount,
+                    referenceNumber: reimbursement.referenceNumber
+                }
+            });
+
             // Dynamic S3 PDF Generation & Upload
             try {
                 const employee = await User.findById(reimbursement.userId).lean() as any;
@@ -652,6 +670,21 @@ const reimbursementRoutes: FastifyPluginAsync = async (fastify) => {
                     console.error("Failed to delete compiled PDF on reimbursement deletion:", s3Err);
                 }
             }
+
+            // Log reimbursement deletion to audit log
+            logAction({
+                organizationId: request.user.organizationId,
+                actorId: request.user.id || request.user._id,
+                actorRole: request.user.role,
+                action: 'REIMBURSEMENT_DELETED',
+                targetType: 'Reimbursement',
+                targetId: reimbursement._id,
+                metadata: {
+                    employeeName: request.user.name,
+                    title: reimbursement.title,
+                    referenceNumber: reimbursement.referenceNumber
+                }
+            });
 
             // Delete from database
             await Reimbursement.deleteOne({ _id: id });

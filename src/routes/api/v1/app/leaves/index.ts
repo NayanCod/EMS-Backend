@@ -10,6 +10,7 @@ import {
   getLeaveReviewedEmployeeTemplate,
 } from '../../../../../utils/emailTemplates';
 import { notifyUser, notifyUsers } from '../../../../../services/notificationService';
+import { logAction } from '../../../../../services/auditService';
 
 // Helper: Check if a date is a holiday or weekend
 export async function isHolidayOrWeekend(dateStr: string, organizationId: string): Promise<boolean> {
@@ -124,6 +125,24 @@ export default async function leaveRoutes(fastify: FastifyInstance) {
     });
 
     await leave.save();
+
+    // Log the leave request to the audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'LEAVE_REQUESTED',
+      targetType: 'Leave',
+      targetId: leave._id,
+      metadata: {
+        employeeName: user.name,
+        type: leave.type,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        dayCount: leave.dayCount,
+        reason: leave.reason
+      }
+    });
 
     // 4. Send Notifications to Admins
     const admins = await User.find({
@@ -274,6 +293,24 @@ export default async function leaveRoutes(fastify: FastifyInstance) {
     leave.status = 'cancelled';
     await leave.save();
 
+    // Log the leave cancellation to the audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: 'EMPLOYEE',
+      action: 'LEAVE_CANCELLED',
+      targetType: 'Leave',
+      targetId: leave._id,
+      metadata: {
+        employeeName: user.name,
+        leaveType: leave.type,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        dayCount: leave.dayCount,
+        reason: leave.reason
+      }
+    });
+
     return reply.ok({ message: 'Leave request cancelled successfully', leave });
   });
 
@@ -306,6 +343,25 @@ export default async function leaveRoutes(fastify: FastifyInstance) {
     await leave.save();
 
     const targetEmployee = leave.employeeId as any;
+
+    // Log the review action (approved/rejected) to the audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: 'ADMIN',
+      action: status === 'approved' ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED',
+      targetType: 'Leave',
+      targetId: leave._id,
+      metadata: {
+        employeeName: targetEmployee?.name,
+        leaveType: leave.type,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        dayCount: leave.dayCount,
+        reviewComment: comment
+      }
+    });
+
     if (targetEmployee) {
       notifyUser(targetEmployee._id, 'LEAVE_REVIEWED', {
         status,

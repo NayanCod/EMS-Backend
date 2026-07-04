@@ -4,6 +4,7 @@ import { User } from '../../../../../models/User';
 import { sendMail } from '../../../../../services/emailService';
 import { getTaskAssignedTemplate } from '../../../../../utils/emailTemplates';
 import { notifyUser } from '../../../../../services/notificationService';
+import { logAction } from '../../../../../services/auditService';
 
 export default async function todoRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -46,6 +47,21 @@ export default async function todoRoutes(fastify: FastifyInstance) {
       if (assignedBy) {
         const targetUser = await User.findById(targetUserId).select('name email emailNotificationsEnabled appNotificationsEnabled').lean();
 
+        // Log task assignment to audit log
+        logAction({
+          organizationId: user.organizationId,
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'TASK_ASSIGNED',
+          targetType: 'Task',
+          targetId: todo._id,
+          metadata: {
+            taskTitle: todo.task,
+            employeeName: targetUser?.name || 'Unknown Employee',
+            assignedByName: assignerName,
+          }
+        });
+
         // In-app & Push notification (fire-and-forget, error-isolated)
         notifyUser(targetUserId, 'TASK_ASSIGNED', {
           title: task,
@@ -87,9 +103,24 @@ export default async function todoRoutes(fastify: FastifyInstance) {
     }
 
     if (status) {
+      const wasCompleted = todo.status === 'completed';
       todo.status = status;
       if (status === 'completed') {
         todo.completedAt = new Date();
+        if (!wasCompleted) {
+          logAction({
+            organizationId: user.organizationId,
+            actorId: user.id,
+            actorRole: user.role,
+            action: 'TASK_COMPLETED',
+            targetType: 'Task',
+            targetId: todo._id,
+            metadata: {
+              taskTitle: todo.task,
+              employeeName: user.name,
+            }
+          });
+        }
       } else {
         todo.completedAt = undefined;
       }
@@ -150,6 +181,23 @@ export default async function todoRoutes(fastify: FastifyInstance) {
 
     if (todo.userId.toString() !== user.id && user.role !== 'ADMIN') {
       return reply.forbidden('403', 'Only the task owner or admin can delete this task');
+    }
+
+    if (todo.assignedBy || user.role === 'ADMIN') {
+      const targetUser = await User.findById(todo.userId).select('name').lean();
+      logAction({
+        organizationId: user.organizationId,
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'TASK_DELETED',
+        targetType: 'Task',
+        targetId: todo._id,
+        metadata: {
+          taskTitle: todo.task,
+          employeeName: targetUser?.name || 'Unknown Employee',
+          wasAssignedByAdmin: !!todo.assignedBy
+        }
+      });
     }
 
     await Todo.deleteOne({ _id: id });
