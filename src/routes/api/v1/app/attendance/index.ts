@@ -10,7 +10,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
   // POST /check-in
   fastify.post('/check-in', async (request, reply) => {
     const user = request.user as any;
-    const { latitude, longitude } = request.body as { latitude: number; longitude: number };
+    const { latitude, longitude, reason } = request.body as { latitude: number; longitude: number; reason?: string };
 
     if (latitude == null || longitude == null) {
       return reply.badRequest('MISSING_FIELDS', 'Latitude and longitude are required');
@@ -55,6 +55,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       checkInTime: new Date(),
       latitude,
       longitude,
+      reason,
     });
 
     await record.save();
@@ -64,6 +65,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
   // POST /check-out
   fastify.post('/check-out', async (request, reply) => {
     const user = request.user as any;
+    const { reason } = request.body as { reason?: string } || {};
     const today = new Date().toISOString().split('T')[0];
 
     const record = await Attendance.findOne({ userId: user.id, date: today });
@@ -76,6 +78,13 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     }
 
     record.checkOutTime = new Date();
+    if (reason) {
+      if (record.reason) {
+        record.reason = `${record.reason} | Check-out: ${reason}`;
+      } else {
+        record.reason = reason;
+      }
+    }
     await record.save();
 
     return reply.ok({ message: 'Checked out successfully', record });
@@ -228,7 +237,11 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       .select('startDate endDate type')
       .lean();
 
-    return reply.ok({ records, leaves });
+    const holidays = await Holiday.find({
+      organizationId: user.organizationId
+    }).lean();
+
+    return reply.ok({ records, leaves, holidays });
   });
 
 
@@ -286,7 +299,13 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       ? Math.round((onTimeDays / weekRecords.length) * 100)
       : 0;
 
-    return reply.ok({ workingHours, punctuality, workStartTime });
+    return reply.ok({
+      workingHours,
+      punctuality,
+      workStartTime,
+      hasRecords: weekRecords.length > 0,
+      totalRecords: weekRecords.length
+    });
   });
 }
 

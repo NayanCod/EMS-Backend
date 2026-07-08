@@ -110,10 +110,12 @@ export default fp(async (fastify, _opts) => {
 
         if (admins.length === 0) continue;
 
-        // Yesterday's date
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        // Yesterday's date in IST
+        const now = new Date();
+        const istOffset = 5.5 * 60 * 60 * 1000;
+        const nowIST = new Date(now.getTime() + istOffset);
+        const yesterdayIST = new Date(nowIST.getTime() - 24 * 60 * 60 * 1000);
+        const yesterdayStr = yesterdayIST.toISOString().split('T')[0];
         const yesterdayMonthDay = yesterdayStr.slice(5); // MM-DD
 
         // Check if yesterday was a holiday
@@ -172,10 +174,10 @@ export default fp(async (fastify, _opts) => {
             name: emp.name,
             status,
             checkIn: att?.checkInTime
-              ? new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              ? new Date(att.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata', hour12: true })
               : '-',
             checkOut: att?.checkOutTime
-              ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata', hour12: true })
               : '-',
             completedTasks: empTodos.filter(t => t.status === 'completed').map(t => t.task),
             pendingTasks: empTodos.filter(t => t.status === 'pending').map(t => t.task),
@@ -196,6 +198,8 @@ export default fp(async (fastify, _opts) => {
     } catch (err) {
       console.error('[Cron] Daily report job failed:', err);
     }
+  }, {
+    timezone: 'Asia/Kolkata'
   });
 
   // ─── Monthly Report: 1st of every month at 12:30 PM ───
@@ -213,47 +217,56 @@ export default fp(async (fastify, _opts) => {
 
         if (admins.length === 0) continue;
 
-        // Previous month boundaries
+        // Previous month boundaries based on IST
         const now = new Date();
-        const firstDayPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const lastDayPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-        const totalDays = lastDayPrevMonth.getDate();
+        const istOffset = 5.5 * 60 * 60 * 1000;
+        const nowIST = new Date(now.getTime() + istOffset);
 
-        const startStr = firstDayPrevMonth.toISOString().split('T')[0];
-        const endStr = lastDayPrevMonth.toISOString().split('T')[0];
+        const year = nowIST.getUTCFullYear();
+        const month = nowIST.getUTCMonth(); // 0-indexed (0 = Jan, 11 = Dec)
 
-        const monthName = firstDayPrevMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const prevMonthYear = month === 0 ? year - 1 : year;
+        const prevMonth = month === 0 ? 11 : month - 1;
+
+        const startStr = `${prevMonthYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
+
+        const lastDay = new Date(Date.UTC(year, month, 0));
+        const endStr = lastDay.toISOString().split('T')[0];
+
+        const firstDayPrevMonth = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
+        const monthName = firstDayPrevMonth.toLocaleString('default', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
         // Calculate weekdays (workingDays) in previous month
         let workingDaysInMonth = 0;
-        let dIter = new Date(firstDayPrevMonth);
-        while (dIter <= lastDayPrevMonth) {
-          const day = dIter.getDay();
+        let dIter = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
+        const dEnd = new Date(Date.UTC(year, month, 0));
+        while (dIter <= dEnd) {
+          const day = dIter.getUTCDay();
           if (day !== 0 && day !== 6) { // not Sat/Sun
             workingDaysInMonth++;
           }
-          dIter.setDate(dIter.getDate() + 1);
+          dIter.setUTCDate(dIter.getUTCDate() + 1);
         }
 
         // Fetch organization holidays to deduct
         const orgHolidays = await Holiday.find({ organizationId: org._id }).lean();
         let holidayDaysInMonth = 0;
-        dIter = new Date(firstDayPrevMonth);
-        while (dIter <= lastDayPrevMonth) {
-          const yyyy = dIter.getFullYear();
-          const mm = String(dIter.getMonth() + 1).padStart(2, '0');
-          const dd = String(dIter.getDate()).padStart(2, '0');
+        dIter = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
+        while (dIter <= dEnd) {
+          const yyyy = dIter.getUTCFullYear();
+          const mm = String(dIter.getUTCMonth() + 1).padStart(2, '0');
+          const dd = String(dIter.getUTCDate()).padStart(2, '0');
           const dStr = `${yyyy}-${mm}-${dd}`;
           const monthDay = dStr.slice(5);
 
           const isHoliday = orgHolidays.some(h => h.date === dStr || (h.recurring && h.date.slice(5) === monthDay));
-          const day = dIter.getDay();
+          const day = dIter.getUTCDay();
 
           // Only count weekday holidays to avoid double deduction
           if (isHoliday && day !== 0 && day !== 6) {
             holidayDaysInMonth++;
           }
-          dIter.setDate(dIter.getDate() + 1);
+          dIter.setUTCDate(dIter.getUTCDate() + 1);
         }
 
         const denominator = Math.max(1, workingDaysInMonth - holidayDaysInMonth);
@@ -297,23 +310,26 @@ export default fp(async (fastify, _opts) => {
             const overlapStartStr = leave.startDate > startStr ? leave.startDate : startStr;
             const overlapEndStr = leave.endDate < endStr ? leave.endDate : endStr;
 
-            let lIter = new Date(overlapStartStr);
-            const overlapEnd = new Date(overlapEndStr);
+            const [sYear, sMonth, sDay] = overlapStartStr.split('-').map(Number);
+            const [eYear, eMonth, eDay] = overlapEndStr.split('-').map(Number);
+
+            let lIter = new Date(Date.UTC(sYear, sMonth - 1, sDay));
+            const overlapEnd = new Date(Date.UTC(eYear, eMonth - 1, eDay));
 
             while (lIter <= overlapEnd) {
-              const yyyy = lIter.getFullYear();
-              const mm = String(lIter.getMonth() + 1).padStart(2, '0');
-              const dd = String(lIter.getDate()).padStart(2, '0');
+              const yyyy = lIter.getUTCFullYear();
+              const mm = String(lIter.getUTCMonth() + 1).padStart(2, '0');
+              const dd = String(lIter.getUTCDate()).padStart(2, '0');
               const dStr = `${yyyy}-${mm}-${dd}`;
               const monthDay = dStr.slice(5);
 
-              const isWeekend = lIter.getDay() === 0 || lIter.getDay() === 6;
+              const isWeekend = lIter.getUTCDay() === 0 || lIter.getUTCDay() === 6;
               const isHoliday = orgHolidays.some(h => h.date === dStr || (h.recurring && h.date.slice(5) === monthDay));
 
               if (!isWeekend && !isHoliday) {
                 leaveDaysTaken++;
               }
-              lIter.setDate(lIter.getDate() + 1);
+              lIter.setUTCDate(lIter.getUTCDate() + 1);
             }
           }
 
@@ -345,6 +361,8 @@ export default fp(async (fastify, _opts) => {
     } catch (err) {
       console.error('[Cron] Monthly report job failed:', err);
     }
+  }, {
+    timezone: 'Asia/Kolkata'
   });
 
   // ─── Workday Reminders: Check every minute ───
@@ -353,14 +371,16 @@ export default fp(async (fastify, _opts) => {
 
     try {
       const now = new Date();
-      // Use local timezone hours/minutes matching system/org definitions
-      const currentHourStr = String(now.getHours()).padStart(2, '0');
-      const currentMinuteStr = String(now.getMinutes()).padStart(2, '0');
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const nowIST = new Date(now.getTime() + istOffset);
+
+      const currentHourStr = String(nowIST.getUTCHours()).padStart(2, '0');
+      const currentMinuteStr = String(nowIST.getUTCMinutes()).padStart(2, '0');
       const currentTimeStr = `${currentHourStr}:${currentMinuteStr}`;
 
-      const currentDateStr = now.toISOString().split('T')[0];
+      const currentDateStr = nowIST.toISOString().split('T')[0];
       const currentMonthDay = currentDateStr.slice(5); // MM-DD
-      const currentDay = now.getDay(); // 0 (Sunday) to 6 (Saturday)
+      const currentDay = nowIST.getUTCDay(); // 0 (Sunday) to 6 (Saturday)
 
       // Skip on Saturday (6) or Sunday (0)
       // if (currentDay === 0 || currentDay === 6) {
@@ -395,12 +415,12 @@ export default fp(async (fastify, _opts) => {
         const isLateCheckin = currentTimeStr === lateCheckinTime;
         const isForgotCheckout = currentTimeStr === forgotCheckoutTime;
 
-        console.log("current time", currentTimeStr);
-        console.log("start reminder time", startReminderTime);
-        console.log("lunch reminder time", lunchReminderTime);
-        console.log("end reminder time", endReminderTime);
-        console.log("late checkin time", lateCheckinTime);
-        console.log("forgot checkout time", forgotCheckoutTime);
+        // console.log("current time", currentTimeStr);
+        // console.log("start reminder time", startReminderTime);
+        // console.log("lunch reminder time", lunchReminderTime);
+        // console.log("end reminder time", endReminderTime);
+        // console.log("late checkin time", lateCheckinTime);
+        // console.log("forgot checkout time", forgotCheckoutTime);
 
 
         if (!isStart && !isLunch && !isEnd && !isLateCheckin && !isForgotCheckout) {

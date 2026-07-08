@@ -7,6 +7,7 @@ export interface IAttendance extends Document {
   checkOutTime?: Date;
   latitude: number;
   longitude: number;
+  reason?: string;
 }
 
 const AttendanceSchema: Schema = new Schema({
@@ -20,6 +21,7 @@ const AttendanceSchema: Schema = new Schema({
   checkOutTime: { type: Date },
   latitude: { type: Number, required: true, min: -90, max: 90 },
   longitude: { type: Number, required: true, min: -180, max: 180 },
+  reason: { type: String },
 }, {
   timestamps: true,
 });
