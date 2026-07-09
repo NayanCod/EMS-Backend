@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { Holiday } from '../../../../../models/Holiday';
+import { logAction } from '../../../../../services/auditService';
 
 export default async function holidayRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -47,6 +48,21 @@ export default async function holidayRoutes(fastify: FastifyInstance) {
 
     await holiday.save();
 
+    // Log holiday creation to audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'HOLIDAY_CREATED',
+      targetType: 'Holiday',
+      targetId: holiday._id,
+      metadata: {
+        holidayName: holiday.name,
+        date: holiday.date,
+        recurring: holiday.recurring
+      }
+    });
+
     return reply.created({ message: 'Holiday created successfully', holiday });
   });
 
@@ -82,6 +98,21 @@ export default async function holidayRoutes(fastify: FastifyInstance) {
 
     await holiday.save();
 
+    // Log holiday update to audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'HOLIDAY_UPDATED',
+      targetType: 'Holiday',
+      targetId: holiday._id,
+      metadata: {
+        holidayName: holiday.name,
+        date: holiday.date,
+        recurring: holiday.recurring
+      }
+    });
+
     return reply.ok({ message: 'Holiday updated successfully', holiday });
   });
 
@@ -98,6 +129,20 @@ export default async function holidayRoutes(fastify: FastifyInstance) {
     if (!holiday) {
       return reply.notFound('Holiday not found');
     }
+
+    // Log holiday deletion to audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'HOLIDAY_DELETED',
+      targetType: 'Holiday',
+      targetId: holiday._id,
+      metadata: {
+        holidayName: holiday.name,
+        date: holiday.date,
+      }
+    });
 
     return reply.ok({ message: 'Holiday deleted successfully' });
   });

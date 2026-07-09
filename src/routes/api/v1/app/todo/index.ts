@@ -131,9 +131,9 @@ export default async function todoRoutes(fastify: FastifyInstance) {
     return reply.ok({ message: 'Todo updated', todo });
   });
 
-  fastify.get('/', async (request: FastifyRequest<{ Querystring: { filter?: string; page?: string; limit?: string } }>, reply) => {
+  fastify.get('/', async (request: FastifyRequest<{ Querystring: { filter?: string; page?: string; limit?: string; search?: string } }>, reply) => {
     const user = request.user as any;
-    const { filter, page = '1', limit = '10' } = request.query;
+    const { filter, page = '1', limit = '10', search } = request.query;
 
     const baseQuery = { userId: user.id };
     const query: any = { ...baseQuery };
@@ -146,6 +146,10 @@ export default async function todoRoutes(fastify: FastifyInstance) {
       query.status = { $ne: 'completed' };
     } else if (filter === 'completed') {
       query.status = 'completed';
+    }
+
+    if (search) {
+      query.task = { $regex: search, $options: 'i' };
     }
 
     const total = await Todo.countDocuments(query);

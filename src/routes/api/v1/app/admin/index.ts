@@ -34,6 +34,23 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       organizationId: admin.organizationId
     });
     await user.save();
+
+    // Log employee creation to audit log
+    logAction({
+      organizationId: admin.organizationId,
+      actorId: admin._id,
+      actorRole: 'ADMIN',
+      action: 'EMPLOYEE_CREATED',
+      targetType: 'User',
+      targetId: user._id,
+      metadata: {
+        employeeName: user.name,
+        employeeEmail: user.email,
+        designation: user.designation,
+        employeeId: user.employeeId,
+      }
+    });
+
     return reply.created({ message: 'Employee created', user: { id: user._id, name, email, phoneNumber, designation, employeeId, department, organizationId: user.organizationId } });
   });
 
@@ -100,6 +117,20 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       { new: true }
     );
     if (!user) return reply.notFound('Employee not found');
+
+    // Log employee removal to audit log
+    logAction({
+      organizationId: admin.organizationId,
+      actorId: admin._id,
+      actorRole: 'ADMIN',
+      action: 'EMPLOYEE_REMOVED',
+      targetType: 'User',
+      targetId: user._id,
+      metadata: {
+        employeeName: user.name,
+        employeeEmail: user.email,
+      }
+    });
 
     return reply.ok({ message: 'Employee removed successfully' });
   });
@@ -245,13 +276,18 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/employee/:id/todos', async (request, reply) => {
     const admin = request.user as any;
     const { id } = request.params as any;
-    const { page = 1, limit = 10 } = request.query as any;
+    const { page = 1, limit = 10, search } = request.query as any;
 
     const user = await User.findOne({ _id: id, organizationId: admin.organizationId }).select('_id');
     if (!user) return reply.notFound('Employee not found');
 
-    const total = await Todo.countDocuments({ userId: id });
-    const todos = await Todo.find({ userId: id })
+    const query: any = { userId: id };
+    if (search) {
+      query.task = { $regex: search, $options: 'i' };
+    }
+
+    const total = await Todo.countDocuments(query);
+    const todos = await Todo.find(query)
       .sort({ date: -1 })
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit))

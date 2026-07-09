@@ -3,6 +3,7 @@ import { Attendance } from '../../../../../models/Attendance';
 import { Organization } from '../../../../../models/Organization';
 import { Leave } from '../../../../../models/Leave';
 import { Holiday } from '../../../../../models/Holiday';
+import { logAction } from '../../../../../services/auditService';
 
 export default async function attendanceRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -59,6 +60,24 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     });
 
     await record.save();
+
+    // Log check-in to audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'CHECK_IN',
+      targetType: 'Attendance',
+      targetId: record._id,
+      metadata: {
+        employeeName: user.name,
+        latitude,
+        longitude,
+        reason,
+        time: record.checkInTime,
+      }
+    });
+
     return reply.created({ message: 'Checked in successfully', record });
   });
 
@@ -86,6 +105,21 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
       }
     }
     await record.save();
+
+    // Log check-out to audit log
+    logAction({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'CHECK_OUT',
+      targetType: 'Attendance',
+      targetId: record._id,
+      metadata: {
+        employeeName: user.name,
+        reason,
+        time: record.checkOutTime,
+      }
+    });
 
     return reply.ok({ message: 'Checked out successfully', record });
   });
