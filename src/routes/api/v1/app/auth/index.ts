@@ -34,7 +34,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const expectedRole = role === 'admin' ? 'ADMIN' : 'EMPLOYEE';
       if (user.role !== expectedRole) {
         return reply.badRequest(
-          '400', 
+          '400',
           `This account is registered as ${user.role.toLowerCase()}, but you selected ${role} login.`
         );
       }
@@ -102,14 +102,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
       const adminWelcomeHtml = getAdminWelcomeTemplate(name, orgName, orgCode);
       sendMail({
         to: email,
-        subject: `Welcome to AttendancePro! Your Organization is Registered`,
+        subject: `Welcome to ALine! Your Organization is Registered`,
         html: adminWelcomeHtml,
       }).catch(err => console.error('[SignupAdmin] Welcome email failed:', err));
 
       const adminNotification = new Notification({
         userId: user._id,
-        title: 'Welcome to AttendancePro',
-        message: `Welcome to AttendancePro! Your organization "${orgName}" has been successfully created. Code: ${orgCode}`
+        title: 'Welcome to ALine',
+        message: `Welcome to ALine! Your organization "${orgName}" has been successfully created. Code: ${orgCode}`
       });
       await adminNotification.save().catch(err => console.error('[SignupAdmin] Welcome notification failed:', err));
 
@@ -164,8 +164,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
       // Welcome notification to employee
       const empNotification = new Notification({
         userId: user._id,
-        title: 'Welcome to AttendancePro',
-        message: `Welcome to AttendancePro! You have successfully registered and joined "${organization.name}".`
+        title: 'Welcome to ALine',
+        message: `Welcome to ALine! You have successfully registered and joined "${organization.name}".`
       });
       await empNotification.save().catch(err => console.error('[SignupEmployee] Employee welcome notification failed:', err));
 

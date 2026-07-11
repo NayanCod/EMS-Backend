@@ -9,7 +9,7 @@ import { getNotificationConfig, NotificationType } from './notificationRegistry'
 // Initialize Firebase Admin SDK
 try {
   if (getApps().length === 0) {
-    // const serviceAccountPath = path.resolve(__dirname, '../../attendancepro-f738f-firebase-adminsdk-fbsvc-f684bd8d53.json');
+    // const serviceAccountPath = path.resolve(__dirname, '../../ALine-f738f-firebase-adminsdk-fbsvc-f684bd8d53.json');
     // if (fs.existsSync(serviceAccountPath)) {
     // const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON!);
