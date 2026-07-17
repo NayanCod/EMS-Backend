@@ -4,6 +4,7 @@ import { Organization } from '../../../../../models/Organization';
 import { Leave } from '../../../../../models/Leave';
 import { Holiday } from '../../../../../models/Holiday';
 import { logAction } from '../../../../../services/auditService';
+import { processForgottenCheckouts } from '../../../../../services/attendanceService';
 
 export default async function attendanceRoutes(fastify: FastifyInstance) {
   fastify.addHook('preValidation', fastify.authenticate);
@@ -129,6 +130,33 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     const user = request.user as any;
     const { page = 1, limit = 10, status = 'all' } = request.query as any;
 
+    // Auto-checkout any forgotten checkouts from previous days as a safety net
+    try {
+      await processForgottenCheckouts(user.id);
+    } catch (err: any) {
+      fastify.log.error(`[History] Failed to process forgotten checkouts: ${err.message}`);
+    }
+
+    // Find any forgotten checkouts that need to show alerts to the user
+    const pendingAlerts = await Attendance.find({
+      userId: user.id,
+      forgotCheckout: true,
+      forgotCheckoutAlertShown: false
+    }).lean();
+
+    const forgottenCheckoutAlerts = pendingAlerts.map(rec => ({
+      date: rec.date,
+      checkInTime: rec.checkInTime,
+      checkOutTime: rec.checkOutTime
+    }));
+
+    if (pendingAlerts.length > 0) {
+      await Attendance.updateMany(
+        { _id: { $in: pendingAlerts.map(rec => rec._id) } },
+        { $set: { forgotCheckoutAlertShown: true } }
+      );
+    }
+
     const earliestRecord = await Attendance.findOne({ userId: user.id })
       .sort({ date: 1 })
       .lean();
@@ -236,7 +264,7 @@ export default async function attendanceRoutes(fastify: FastifyInstance) {
     const total = filteredItems.length;
     const paginatedItems = filteredItems.slice((Number(page) - 1) * Number(limit), Number(page) * Number(limit));
 
-    return reply.ok({ records: paginatedItems, total, page: Number(page), limit: Number(limit) });
+    return reply.ok({ records: paginatedItems, total, page: Number(page), limit: Number(limit), forgottenCheckoutAlerts });
   });
 
   // GET /contribution — highly optimized attendance for contribution graph (selected or current month/year)

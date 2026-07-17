@@ -9,6 +9,7 @@ import { Leave } from '../models/Leave';
 import { Holiday } from '../models/Holiday';
 import { sendMail } from '../services/emailService';
 import { notifyUsers } from '../services/notificationService';
+import { processForgottenCheckouts } from '../services/attendanceService';
 import {
   getDailyReportTemplate,
   getMonthlyReportTemplate,
@@ -94,6 +95,19 @@ async function getCheckoutAdvice(): Promise<string> {
 }
 
 export default fp(async (fastify, _opts) => {
+  // ─── Process Forgotten Checkouts: Every day at 12:05 AM ───
+  cron.schedule('5 0 * * *', async () => {
+    console.log('[Cron] Running forgotten checkouts processing job...');
+    try {
+      await processForgottenCheckouts();
+      console.log('[Cron] Forgotten checkouts processing completed.');
+    } catch (err: any) {
+      console.error('[Cron] Forgotten checkouts processing job failed:', err.message);
+    }
+  }, {
+    timezone: 'Asia/Kolkata'
+  });
+
   // ─── Daily Report: Every day at 11:30 AM ───
   cron.schedule('30 11 * * *', async () => {
     console.log('[Cron] Running daily report job...');

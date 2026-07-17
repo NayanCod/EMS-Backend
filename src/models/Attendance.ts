@@ -8,6 +8,8 @@ export interface IAttendance extends Document {
   latitude: number;
   longitude: number;
   reason?: string;
+  forgotCheckout?: boolean;
+  forgotCheckoutAlertShown?: boolean;
 }
 
 const AttendanceSchema: Schema = new Schema({
@@ -22,6 +24,8 @@ const AttendanceSchema: Schema = new Schema({
   latitude: { type: Number, required: true, min: -90, max: 90 },
   longitude: { type: Number, required: true, min: -180, max: 180 },
   reason: { type: String },
+  forgotCheckout: { type: Boolean, default: false },
+  forgotCheckoutAlertShown: { type: Boolean, default: false },
 }, {
   timestamps: true,
 });
