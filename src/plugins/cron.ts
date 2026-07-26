@@ -1,23 +1,26 @@
-import fp from 'fastify-plugin';
-import cron from 'node-cron';
-import axios from 'axios';
-import { User } from '../models/User';
-import { Attendance } from '../models/Attendance';
-import { Todo } from '../models/Todo';
-import { Organization } from '../models/Organization';
-import { Leave } from '../models/Leave';
-import { Holiday } from '../models/Holiday';
-import { sendMail } from '../services/emailService';
-import { notifyUsers } from '../services/notificationService';
-import { processForgottenCheckouts } from '../services/attendanceService';
+import fp from "fastify-plugin";
+import cron from "node-cron";
+import axios from "axios";
+import { User } from "../models/User";
+import { Attendance } from "../models/Attendance";
+import { Todo } from "../models/Todo";
+import { Organization } from "../models/Organization";
+import { Leave } from "../models/Leave";
+import { Holiday } from "../models/Holiday";
+import { sendMail } from "../services/emailService";
+import { notifyUsers } from "../services/notificationService";
+import { processForgottenCheckouts } from "../services/attendanceService";
 import {
   getDailyReportTemplate,
   getMonthlyReportTemplate,
   IEmployeeDailyRecord,
   IEmployeeMonthlyRecord,
-} from '../utils/emailTemplates';
+} from "../utils/emailTemplates";
 
-function getOffsetTimeStr(timeStr: string | undefined, offsetMinutes: number): string | null {
+function getOffsetTimeStr(
+  timeStr: string | undefined,
+  offsetMinutes: number,
+): string | null {
   if (!timeStr) return null;
   const match = timeStr.match(/^(\d{2}):(\d{2})$/);
   if (!match) return null;
@@ -28,359 +31,455 @@ function getOffsetTimeStr(timeStr: string | undefined, offsetMinutes: number): s
   if (totalMinutes < 0) {
     totalMinutes += 24 * 60;
   }
-  totalMinutes %= (24 * 60);
+  totalMinutes %= 24 * 60;
 
   const finalHour = Math.floor(totalMinutes / 60);
   const finalMinute = totalMinutes % 60;
 
-  return `${String(finalHour).padStart(2, '0')}:${String(finalMinute).padStart(2, '0')}`;
+  return `${String(finalHour).padStart(2, "0")}:${String(finalMinute).padStart(2, "0")}`;
 }
 
 async function getMotivationalQuote(): Promise<string> {
   try {
-    const res = await axios.get('https://zenquotes.io/api/random', { timeout: 3000 });
+    const res = await axios.get("https://zenquotes.io/api/random", {
+      timeout: 3000,
+    });
     if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
       const q = res.data[0];
       return `"${q.q}" — ${q.a}`;
     }
   } catch (err: any) {
-    console.error('[Cron] Failed to fetch motivational quote, using fallback:', err.message);
+    console.error(
+      "[Cron] Failed to fetch motivational quote, using fallback:",
+      err.message,
+    );
   }
   const fallbacks = [
     "Believe you can and you're halfway there. — Theodore Roosevelt",
     "The only way to do great work is to love what you do. — Steve Jobs",
     "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
     "Act as if what you do makes a difference. It does. — William James",
-    "Keep your face always toward the sunshine - and shadows will fall behind you. — Walt Whitman"
+    "Keep your face always toward the sunshine - and shadows will fall behind you. — Walt Whitman",
   ];
   return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
 async function getLunchAdvice(): Promise<string> {
   try {
-    const res = await axios.get('https://api.adviceslip.com/advice', { timeout: 3000 });
+    const res = await axios.get("https://api.adviceslip.com/advice", {
+      timeout: 3000,
+    });
     if (res.status === 200 && res.data?.slip?.advice) {
       return res.data.slip.advice;
     }
   } catch (err: any) {
-    console.error('[Cron] Failed to fetch lunch advice, using fallback:', err.message);
+    console.error(
+      "[Cron] Failed to fetch lunch advice, using fallback:",
+      err.message,
+    );
   }
   const fallbacks = [
     "Time to step away from the keyboard and recharge.",
     "Feed your body and rest your mind. You've earned this break!",
     "A hungry mind needs a fed body.",
     "Step away, stretch your legs, and enjoy a nice meal.",
-    "Don't skip lunch! Take some time to refuel."
+    "Don't skip lunch! Take some time to refuel.",
   ];
   return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
 async function getCheckoutAdvice(): Promise<string> {
   try {
-    const res = await axios.get('https://api.adviceslip.com/advice', { timeout: 3000 });
+    const res = await axios.get("https://api.adviceslip.com/advice", {
+      timeout: 3000,
+    });
     if (res.status === 200 && res.data?.slip?.advice) {
       return res.data.slip.advice;
     }
   } catch (err: any) {
-    console.error('[Cron] Failed to fetch checkout advice, using fallback:', err.message);
+    console.error(
+      "[Cron] Failed to fetch checkout advice, using fallback:",
+      err.message,
+    );
   }
   const fallbacks = [
     "Fantastic job today! Wrap up your tasks and document your progress.",
     "Almost time to head home! Make sure your timesheet is updated and enjoy your evening.",
     "The day is winding down. Wrap up your pending items and prepare for a restful evening.",
     "You worked hard today. Take a moment to log out, checkout, and relax.",
-    "Time to close the laptop! Enjoy your off-hours, you did great."
+    "Time to close the laptop! Enjoy your off-hours, you did great.",
   ];
   return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
 export default fp(async (fastify, _opts) => {
   // ─── Process Forgotten Checkouts: Every day at 12:05 AM ───
-  cron.schedule('5 0 * * *', async () => {
-    console.log('[Cron] Running forgotten checkouts processing job...');
-    try {
-      await processForgottenCheckouts();
-      console.log('[Cron] Forgotten checkouts processing completed.');
-    } catch (err: any) {
-      console.error('[Cron] Forgotten checkouts processing job failed:', err.message);
-    }
-  }, {
-    timezone: 'Asia/Kolkata'
-  });
+  cron.schedule(
+    "5 0 * * *",
+    async () => {
+      console.log("[Cron] Running forgotten checkouts processing job...");
+      try {
+        await processForgottenCheckouts();
+        console.log("[Cron] Forgotten checkouts processing completed.");
+      } catch (err: any) {
+        console.error(
+          "[Cron] Forgotten checkouts processing job failed:",
+          err.message,
+        );
+      }
+    },
+    {
+      timezone: "Asia/Kolkata",
+    },
+  );
 
   // ─── Daily Report: Every day at 11:30 AM ───
-  cron.schedule('30 11 * * *', async () => {
-    console.log('[Cron] Running daily report job...');
-    try {
-      const orgs = await Organization.find().lean();
+  cron.schedule(
+    "30 11 * * *",
+    async () => {
+      console.log("[Cron] Running daily report job...");
+      try {
+        const orgs = await Organization.find().lean();
 
-      for (const org of orgs) {
-        // Find all admins for this org with email notifications enabled
-        const admins = await User.find({
-          organizationId: org._id,
-          role: 'ADMIN',
-          emailNotificationsEnabled: true,
-        }).select('email').lean();
+        for (const org of orgs) {
+          // Find all admins for this org with email notifications enabled
+          const admins = await User.find({
+            organizationId: org._id,
+            role: "ADMIN",
+            emailNotificationsEnabled: true,
+          })
+            .select("email")
+            .lean();
 
-        if (admins.length === 0) continue;
+          if (admins.length === 0) continue;
 
-        // Yesterday's date in IST
-        const now = new Date();
-        const istOffset = 5.5 * 60 * 60 * 1000;
-        const nowIST = new Date(now.getTime() + istOffset);
-        const yesterdayIST = new Date(nowIST.getTime() - 24 * 60 * 60 * 1000);
-        const yesterdayStr = yesterdayIST.toISOString().split('T')[0];
-        const yesterdayMonthDay = yesterdayStr.slice(5); // MM-DD
+          // Yesterday's date in IST
+          const now = new Date();
+          const istOffset = 5.5 * 60 * 60 * 1000;
+          const nowIST = new Date(now.getTime() + istOffset);
+          const yesterdayIST = new Date(nowIST.getTime() - 24 * 60 * 60 * 1000);
+          const yesterdayStr = yesterdayIST.toISOString().split("T")[0];
+          const yesterdayMonthDay = yesterdayStr.slice(5); // MM-DD
 
-        // Check if yesterday was a holiday
-        const yesterdayHoliday = await Holiday.findOne({
-          organizationId: org._id,
-          $or: [
-            { date: yesterdayStr },
-            { recurring: true, date: { $regex: new RegExp(`^\\d{4}-${yesterdayMonthDay}$`) } }
-          ]
-        }).lean();
-
-        // All employees in org
-        const employees = await User.find({
-          organizationId: org._id,
-          role: 'EMPLOYEE',
-          status: 'ACTIVE'
-        }).select('name _id').lean();
-
-        const employeeIds = employees.map(e => e._id);
-
-        // Attendance records for yesterday
-        const attendances = await Attendance.find({
-          userId: { $in: employeeIds },
-          date: yesterdayStr,
-        }).lean();
-
-        // Todos for yesterday
-        const todos = await Todo.find({
-          userId: { $in: employeeIds },
-          date: yesterdayStr,
-        }).lean();
-
-        const records: IEmployeeDailyRecord[] = [];
-        for (const emp of employees) {
-          const att = attendances.find(a => a.userId.toString() === emp._id.toString());
-          const empTodos = todos.filter(t => t.userId.toString() === emp._id.toString());
-
-          // Check if employee was on approved leave yesterday
-          const leave = await Leave.findOne({
-            employeeId: emp._id,
-            startDate: { $lte: yesterdayStr },
-            endDate: { $gte: yesterdayStr },
-            status: 'approved'
+          // Check if yesterday was a holiday
+          const yesterdayHoliday = await Holiday.findOne({
+            organizationId: org._id,
+            $or: [
+              { date: yesterdayStr },
+              {
+                recurring: true,
+                date: { $regex: new RegExp(`^\\d{4}-${yesterdayMonthDay}$`) },
+              },
+            ],
           }).lean();
 
-          let status = 'Absent';
-          if (att) {
-            status = yesterdayHoliday ? 'Present (Holiday)' : 'Present';
-          } else if (leave) {
-            status = `On Leave (${leave.type})`;
-          } else if (yesterdayHoliday) {
-            status = 'Holiday';
+          // All employees in org
+          const employees = await User.find({
+            organizationId: org._id,
+            role: "EMPLOYEE",
+            status: "ACTIVE",
+          })
+            .select("name _id")
+            .lean();
+
+          const employeeIds = employees.map((e) => e._id);
+
+          // Attendance records for yesterday
+          const attendances = await Attendance.find({
+            userId: { $in: employeeIds },
+            date: yesterdayStr,
+          }).lean();
+
+          // Todos for yesterday
+          const todos = await Todo.find({
+            userId: { $in: employeeIds },
+            date: yesterdayStr,
+          }).lean();
+
+          const records: IEmployeeDailyRecord[] = [];
+          for (const emp of employees) {
+            const att = attendances.find(
+              (a) => a.userId.toString() === emp._id.toString(),
+            );
+            const empTodos = todos.filter(
+              (t) => t.userId.toString() === emp._id.toString(),
+            );
+
+            // Check if employee was on approved leave yesterday
+            const leave = await Leave.findOne({
+              employeeId: emp._id,
+              startDate: { $lte: yesterdayStr },
+              endDate: { $gte: yesterdayStr },
+              status: "approved",
+            }).lean();
+
+            let status = "Absent";
+            if (att) {
+              status = yesterdayHoliday ? "Present (Holiday)" : "Present";
+            } else if (leave) {
+              status = `On Leave (${leave.type})`;
+            } else if (yesterdayHoliday) {
+              status = "Holiday";
+            }
+
+            records.push({
+              name: emp.name,
+              status,
+              checkIn: att?.checkInTime
+                ? new Date(att.checkInTime).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Kolkata",
+                    hour12: true,
+                  })
+                : "-",
+              checkOut: att?.checkOutTime
+                ? new Date(att.checkOutTime).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Kolkata",
+                    hour12: true,
+                  })
+                : "-",
+              completedTasks: empTodos
+                .filter((t) => t.status === "completed")
+                .map((t) => t.task),
+              pendingTasks: empTodos
+                .filter((t) => t.status === "pending")
+                .map((t) => t.task),
+            });
           }
 
-          records.push({
-            name: emp.name,
-            status,
-            checkIn: att?.checkInTime
-              ? new Date(att.checkInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata', hour12: true })
-              : '-',
-            checkOut: att?.checkOutTime
-              ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata', hour12: true })
-              : '-',
-            completedTasks: empTodos.filter(t => t.status === 'completed').map(t => t.task),
-            pendingTasks: empTodos.filter(t => t.status === 'pending').map(t => t.task),
+          const html = getDailyReportTemplate(yesterdayStr, org.name, records);
+          const adminEmails = admins.map((a) => a.email);
+
+          await sendMail({
+            to: adminEmails,
+            subject: `Daily Report - ${org.name} - ${yesterdayStr}`,
+            html,
           });
         }
 
-        const html = getDailyReportTemplate(yesterdayStr, org.name, records);
-        const adminEmails = admins.map(a => a.email);
-
-        await sendMail({
-          to: adminEmails,
-          subject: `Daily Report - ${org.name} - ${yesterdayStr}`,
-          html,
-        });
+        console.log("[Cron] Daily report job completed.");
+      } catch (err) {
+        console.error("[Cron] Daily report job failed:", err);
       }
-
-      console.log('[Cron] Daily report job completed.');
-    } catch (err) {
-      console.error('[Cron] Daily report job failed:', err);
-    }
-  }, {
-    timezone: 'Asia/Kolkata'
-  });
+    },
+    {
+      timezone: "Asia/Kolkata",
+    },
+  );
 
   // ─── Monthly Report: 1st of every month at 12:30 PM ───
-  cron.schedule('30 12 1 * *', async () => {
-    console.log('[Cron] Running monthly report job...');
-    try {
-      const orgs = await Organization.find().lean();
+  cron.schedule(
+    "30 12 1 * *",
+    async () => {
+      console.log("[Cron] Running monthly report job...");
+      try {
+        const orgs = await Organization.find().lean();
 
-      for (const org of orgs) {
-        const admins = await User.find({
-          organizationId: org._id,
-          role: 'ADMIN',
-          emailNotificationsEnabled: true,
-        }).select('email').lean();
+        for (const org of orgs) {
+          const admins = await User.find({
+            organizationId: org._id,
+            role: "ADMIN",
+            emailNotificationsEnabled: true,
+          })
+            .select("email")
+            .lean();
 
-        if (admins.length === 0) continue;
+          if (admins.length === 0) continue;
 
-        // Previous month boundaries based on IST
-        const now = new Date();
-        const istOffset = 5.5 * 60 * 60 * 1000;
-        const nowIST = new Date(now.getTime() + istOffset);
+          // Previous month boundaries based on IST
+          const now = new Date();
+          const istOffset = 5.5 * 60 * 60 * 1000;
+          const nowIST = new Date(now.getTime() + istOffset);
 
-        const year = nowIST.getUTCFullYear();
-        const month = nowIST.getUTCMonth(); // 0-indexed (0 = Jan, 11 = Dec)
+          const year = nowIST.getUTCFullYear();
+          const month = nowIST.getUTCMonth(); // 0-indexed (0 = Jan, 11 = Dec)
 
-        const prevMonthYear = month === 0 ? year - 1 : year;
-        const prevMonth = month === 0 ? 11 : month - 1;
+          const prevMonthYear = month === 0 ? year - 1 : year;
+          const prevMonth = month === 0 ? 11 : month - 1;
 
-        const startStr = `${prevMonthYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
+          const startStr = `${prevMonthYear}-${String(prevMonth + 1).padStart(2, "0")}-01`;
 
-        const lastDay = new Date(Date.UTC(year, month, 0));
-        const endStr = lastDay.toISOString().split('T')[0];
+          const lastDay = new Date(Date.UTC(year, month, 0));
+          const endStr = lastDay.toISOString().split("T")[0];
 
-        const firstDayPrevMonth = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
-        const monthName = firstDayPrevMonth.toLocaleString('default', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+          const firstDayPrevMonth = new Date(
+            Date.UTC(prevMonthYear, prevMonth, 1),
+          );
+          const monthName = firstDayPrevMonth.toLocaleString("default", {
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          });
 
-        // Calculate weekdays (workingDays) in previous month
-        let workingDaysInMonth = 0;
-        let dIter = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
-        const dEnd = new Date(Date.UTC(year, month, 0));
-        while (dIter <= dEnd) {
-          const day = dIter.getUTCDay();
-          if (day !== 0 && day !== 6) { // not Sat/Sun
-            workingDaysInMonth++;
+          // Calculate weekdays (workingDays) in previous month
+          let workingDaysInMonth = 0;
+          let dIter = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
+          const dEnd = new Date(Date.UTC(year, month, 0));
+          while (dIter <= dEnd) {
+            const day = dIter.getUTCDay();
+            if (day !== 0 && day !== 6) {
+              // not Sat/Sun
+              workingDaysInMonth++;
+            }
+            dIter.setUTCDate(dIter.getUTCDate() + 1);
           }
-          dIter.setUTCDate(dIter.getUTCDate() + 1);
-        }
 
-        // Fetch organization holidays to deduct
-        const orgHolidays = await Holiday.find({ organizationId: org._id }).lean();
-        let holidayDaysInMonth = 0;
-        dIter = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
-        while (dIter <= dEnd) {
-          const yyyy = dIter.getUTCFullYear();
-          const mm = String(dIter.getUTCMonth() + 1).padStart(2, '0');
-          const dd = String(dIter.getUTCDate()).padStart(2, '0');
-          const dStr = `${yyyy}-${mm}-${dd}`;
-          const monthDay = dStr.slice(5);
+          // Fetch organization holidays to deduct
+          const orgHolidays = await Holiday.find({
+            organizationId: org._id,
+          }).lean();
+          let holidayDaysInMonth = 0;
+          dIter = new Date(Date.UTC(prevMonthYear, prevMonth, 1));
+          while (dIter <= dEnd) {
+            const yyyy = dIter.getUTCFullYear();
+            const mm = String(dIter.getUTCMonth() + 1).padStart(2, "0");
+            const dd = String(dIter.getUTCDate()).padStart(2, "0");
+            const dStr = `${yyyy}-${mm}-${dd}`;
+            const monthDay = dStr.slice(5);
 
-          const isHoliday = orgHolidays.some(h => h.date === dStr || (h.recurring && h.date.slice(5) === monthDay));
-          const day = dIter.getUTCDay();
+            const isHoliday = orgHolidays.some(
+              (h) =>
+                h.date === dStr ||
+                (h.recurring && h.date.slice(5) === monthDay),
+            );
+            const day = dIter.getUTCDay();
 
-          // Only count weekday holidays to avoid double deduction
-          if (isHoliday && day !== 0 && day !== 6) {
-            holidayDaysInMonth++;
+            // Only count weekday holidays to avoid double deduction
+            if (isHoliday && day !== 0 && day !== 6) {
+              holidayDaysInMonth++;
+            }
+            dIter.setUTCDate(dIter.getUTCDate() + 1);
           }
-          dIter.setUTCDate(dIter.getUTCDate() + 1);
-        }
 
-        const denominator = Math.max(1, workingDaysInMonth - holidayDaysInMonth);
+          const denominator = Math.max(
+            1,
+            workingDaysInMonth - holidayDaysInMonth,
+          );
 
-        const employees = await User.find({
-          organizationId: org._id,
-          role: 'EMPLOYEE',
-          status: 'ACTIVE'
-        }).select('name _id').lean();
+          const employees = await User.find({
+            organizationId: org._id,
+            role: "EMPLOYEE",
+            status: "ACTIVE",
+          })
+            .select("name _id")
+            .lean();
 
-        const employeeIds = employees.map(e => e._id);
+          const employeeIds = employees.map((e) => e._id);
 
-        // All attendance records for previous month
-        const attendances = await Attendance.find({
-          userId: { $in: employeeIds },
-          date: { $gte: startStr, $lte: endStr },
-        }).lean();
-
-        // All todos for previous month
-        const todos = await Todo.find({
-          userId: { $in: employeeIds },
-          date: { $gte: startStr, $lte: endStr },
-        }).lean();
-
-        const records: IEmployeeMonthlyRecord[] = [];
-        for (const emp of employees) {
-          const empAttendances = attendances.filter(a => a.userId.toString() === emp._id.toString());
-          const empTodos = todos.filter(t => t.userId.toString() === emp._id.toString());
-
-          // Find approved leaves for this employee in previous month
-          const empLeaves = await Leave.find({
-            employeeId: emp._id,
-            status: 'approved',
-            startDate: { $lte: endStr },
-            endDate: { $gte: startStr }
+          // All attendance records for previous month
+          const attendances = await Attendance.find({
+            userId: { $in: employeeIds },
+            date: { $gte: startStr, $lte: endStr },
           }).lean();
 
-          // Calculate leave days overlapping the previous month (excluding weekends/holidays)
-          let leaveDaysTaken = 0;
-          for (const leave of empLeaves) {
-            const overlapStartStr = leave.startDate > startStr ? leave.startDate : startStr;
-            const overlapEndStr = leave.endDate < endStr ? leave.endDate : endStr;
+          // All todos for previous month
+          const todos = await Todo.find({
+            userId: { $in: employeeIds },
+            date: { $gte: startStr, $lte: endStr },
+          }).lean();
 
-            const [sYear, sMonth, sDay] = overlapStartStr.split('-').map(Number);
-            const [eYear, eMonth, eDay] = overlapEndStr.split('-').map(Number);
+          const records: IEmployeeMonthlyRecord[] = [];
+          for (const emp of employees) {
+            const empAttendances = attendances.filter(
+              (a) => a.userId.toString() === emp._id.toString(),
+            );
+            const empTodos = todos.filter(
+              (t) => t.userId.toString() === emp._id.toString(),
+            );
 
-            let lIter = new Date(Date.UTC(sYear, sMonth - 1, sDay));
-            const overlapEnd = new Date(Date.UTC(eYear, eMonth - 1, eDay));
+            // Find approved leaves for this employee in previous month
+            const empLeaves = await Leave.find({
+              employeeId: emp._id,
+              status: "approved",
+              startDate: { $lte: endStr },
+              endDate: { $gte: startStr },
+            }).lean();
 
-            while (lIter <= overlapEnd) {
-              const yyyy = lIter.getUTCFullYear();
-              const mm = String(lIter.getUTCMonth() + 1).padStart(2, '0');
-              const dd = String(lIter.getUTCDate()).padStart(2, '0');
-              const dStr = `${yyyy}-${mm}-${dd}`;
-              const monthDay = dStr.slice(5);
+            // Calculate leave days overlapping the previous month (excluding weekends/holidays)
+            let leaveDaysTaken = 0;
+            for (const leave of empLeaves) {
+              const overlapStartStr =
+                leave.startDate > startStr ? leave.startDate : startStr;
+              const overlapEndStr =
+                leave.endDate < endStr ? leave.endDate : endStr;
 
-              const isWeekend = lIter.getUTCDay() === 0 || lIter.getUTCDay() === 6;
-              const isHoliday = orgHolidays.some(h => h.date === dStr || (h.recurring && h.date.slice(5) === monthDay));
+              const [sYear, sMonth, sDay] = overlapStartStr
+                .split("-")
+                .map(Number);
+              const [eYear, eMonth, eDay] = overlapEndStr
+                .split("-")
+                .map(Number);
 
-              if (!isWeekend && !isHoliday) {
-                leaveDaysTaken++;
+              let lIter = new Date(Date.UTC(sYear, sMonth - 1, sDay));
+              const overlapEnd = new Date(Date.UTC(eYear, eMonth - 1, eDay));
+
+              while (lIter <= overlapEnd) {
+                const yyyy = lIter.getUTCFullYear();
+                const mm = String(lIter.getUTCMonth() + 1).padStart(2, "0");
+                const dd = String(lIter.getUTCDate()).padStart(2, "0");
+                const dStr = `${yyyy}-${mm}-${dd}`;
+                const monthDay = dStr.slice(5);
+
+                const isWeekend =
+                  lIter.getUTCDay() === 0 || lIter.getUTCDay() === 6;
+                const isHoliday = orgHolidays.some(
+                  (h) =>
+                    h.date === dStr ||
+                    (h.recurring && h.date.slice(5) === monthDay),
+                );
+
+                if (!isWeekend && !isHoliday) {
+                  leaveDaysTaken++;
+                }
+                lIter.setUTCDate(lIter.getUTCDate() + 1);
               }
-              lIter.setUTCDate(lIter.getUTCDate() + 1);
             }
+
+            const presentDays = empAttendances.length;
+            const attendanceRate =
+              denominator > 0
+                ? Math.round((presentDays / denominator) * 100)
+                : 0;
+
+            records.push({
+              name: emp.name,
+              presentDays,
+              totalDays: denominator,
+              attendanceRate,
+              leaveDaysTaken,
+              completedTasksCount: empTodos.filter(
+                (t) => t.status === "completed",
+              ).length,
+              pendingTasksCount: empTodos.filter((t) => t.status === "pending")
+                .length,
+            });
           }
 
-          const presentDays = empAttendances.length;
-          const attendanceRate = denominator > 0 ? Math.round((presentDays / denominator) * 100) : 0;
+          const html = getMonthlyReportTemplate(monthName, org.name, records);
+          const adminEmails = admins.map((a) => a.email);
 
-          records.push({
-            name: emp.name,
-            presentDays,
-            totalDays: denominator,
-            attendanceRate,
-            leaveDaysTaken,
-            completedTasksCount: empTodos.filter(t => t.status === 'completed').length,
-            pendingTasksCount: empTodos.filter(t => t.status === 'pending').length,
+          await sendMail({
+            to: adminEmails,
+            subject: `Monthly Report - ${org.name} - ${monthName}`,
+            html,
           });
         }
 
-        const html = getMonthlyReportTemplate(monthName, org.name, records);
-        const adminEmails = admins.map(a => a.email);
-
-        await sendMail({
-          to: adminEmails,
-          subject: `Monthly Report - ${org.name} - ${monthName}`,
-          html,
-        });
+        console.log("[Cron] Monthly report job completed.");
+      } catch (err) {
+        console.error("[Cron] Monthly report job failed:", err);
       }
-
-      console.log('[Cron] Monthly report job completed.');
-    } catch (err) {
-      console.error('[Cron] Monthly report job failed:', err);
-    }
-  }, {
-    timezone: 'Asia/Kolkata'
-  });
+    },
+    {
+      timezone: "Asia/Kolkata",
+    },
+  );
 
   // ─── Workday Reminders: Check every minute ───
-  cron.schedule('* * * * *', async () => {
+  cron.schedule("* * * * *", async () => {
     console.log("runnning every minute cron of workday reminder");
 
     try {
@@ -388,11 +487,11 @@ export default fp(async (fastify, _opts) => {
       const istOffset = 5.5 * 60 * 60 * 1000;
       const nowIST = new Date(now.getTime() + istOffset);
 
-      const currentHourStr = String(nowIST.getUTCHours()).padStart(2, '0');
-      const currentMinuteStr = String(nowIST.getUTCMinutes()).padStart(2, '0');
+      const currentHourStr = String(nowIST.getUTCHours()).padStart(2, "0");
+      const currentMinuteStr = String(nowIST.getUTCMinutes()).padStart(2, "0");
       const currentTimeStr = `${currentHourStr}:${currentMinuteStr}`;
 
-      const currentDateStr = nowIST.toISOString().split('T')[0];
+      const currentDateStr = nowIST.toISOString().split("T")[0];
       const currentMonthDay = currentDateStr.slice(5); // MM-DD
       const currentDay = nowIST.getUTCDay(); // 0 (Sunday) to 6 (Saturday)
 
@@ -411,17 +510,32 @@ export default fp(async (fastify, _opts) => {
           organizationId: org._id,
           $or: [
             { date: currentDateStr },
-            { recurring: true, date: { $regex: new RegExp(`^\\d{4}-${currentMonthDay}$`) } }
-          ]
+            {
+              recurring: true,
+              date: { $regex: new RegExp(`^\\d{4}-${currentMonthDay}$`) },
+            },
+          ],
         }).lean();
 
         if (isHoliday) continue;
 
-        const startReminderTime = getOffsetTimeStr(org.workStartTime || '09:00', -30);
-        const lunchReminderTime = '13:00';
-        const endReminderTime = getOffsetTimeStr(org.workEndTime || '18:00', -15);
-        const lateCheckinTime = getOffsetTimeStr(org.workStartTime || '09:00', 30);
-        const forgotCheckoutTime = getOffsetTimeStr(org.workEndTime || '18:00', 30);
+        const startReminderTime = getOffsetTimeStr(
+          org.workStartTime || "09:00",
+          -30,
+        );
+        const lunchReminderTime = "13:00";
+        const endReminderTime = getOffsetTimeStr(
+          org.workEndTime || "18:00",
+          -15,
+        );
+        const lateCheckinTime = getOffsetTimeStr(
+          org.workStartTime || "09:00",
+          30,
+        );
+        const forgotCheckoutTime = getOffsetTimeStr(
+          org.workEndTime || "18:00",
+          30,
+        );
 
         const isStart = currentTimeStr === startReminderTime;
         const isLunch = currentTimeStr === lunchReminderTime;
@@ -436,17 +550,24 @@ export default fp(async (fastify, _opts) => {
         // console.log("late checkin time", lateCheckinTime);
         // console.log("forgot checkout time", forgotCheckoutTime);
 
-
-        if (!isStart && !isLunch && !isEnd && !isLateCheckin && !isForgotCheckout) {
+        if (
+          !isStart &&
+          !isLunch &&
+          !isEnd &&
+          !isLateCheckin &&
+          !isForgotCheckout
+        ) {
           continue;
         }
 
         // Get active employees for this organization
         const employees = await User.find({
           organizationId: org._id,
-          role: 'EMPLOYEE',
-          status: 'ACTIVE'
-        }).select('_id').lean();
+          role: "EMPLOYEE",
+          status: "ACTIVE",
+        })
+          .select("_id")
+          .lean();
 
         if (employees.length === 0) continue;
 
@@ -457,7 +578,7 @@ export default fp(async (fastify, _opts) => {
             employeeId: emp._id,
             startDate: { $lte: currentDateStr },
             endDate: { $gte: currentDateStr },
-            status: 'approved'
+            status: "approved",
           }).lean();
 
           if (!leave) {
@@ -469,16 +590,23 @@ export default fp(async (fastify, _opts) => {
 
         if (isStart) {
           const quote = await getMotivationalQuote();
-          console.log(`[Cron] Sending WORK_START_REMINDER to ${eligibleEmployees.length} employees of ${org.name}`);
-          await notifyUsers(eligibleEmployees, 'WORK_START_REMINDER', {
-            message: `Good morning! ☕ Office starts in 30 minutes (${org.workStartTime || '09:00'}).\n${quote}`
-          }, false);
+          console.log(
+            `[Cron] Sending WORK_START_REMINDER to ${eligibleEmployees.length} employees of ${org.name}`,
+          );
+          await notifyUsers(
+            eligibleEmployees,
+            "WORK_START_REMINDER",
+            {
+              message: `Good morning! ☕ Office starts in 30 minutes (${org.workStartTime || "09:00"}).\n${quote}`,
+            },
+            false,
+          );
         } else if (isLunch) {
           const checkedInRecipientIds: string[] = [];
           for (const empId of eligibleEmployees) {
             const att = await Attendance.findOne({
               userId: empId,
-              date: currentDateStr
+              date: currentDateStr,
             }).lean();
             if (att && att.checkInTime) {
               checkedInRecipientIds.push(empId);
@@ -487,17 +615,24 @@ export default fp(async (fastify, _opts) => {
 
           if (checkedInRecipientIds.length > 0) {
             const advice = await getLunchAdvice();
-            console.log(`[Cron] Sending LUNCH_BREAK_REMINDER to ${checkedInRecipientIds.length} employees of ${org.name}`);
-            await notifyUsers(checkedInRecipientIds, 'LUNCH_BREAK_REMINDER', {
-              message: `${advice}🍕🥤🌮`
-            }, false);
+            console.log(
+              `[Cron] Sending LUNCH_BREAK_REMINDER to ${checkedInRecipientIds.length} employees of ${org.name}`,
+            );
+            await notifyUsers(
+              checkedInRecipientIds,
+              "LUNCH_BREAK_REMINDER",
+              {
+                message: `${advice}🍕🥤🌮`,
+              },
+              false,
+            );
           }
         } else if (isEnd) {
           const checkedInRecipientIds: string[] = [];
           for (const empId of eligibleEmployees) {
             const att = await Attendance.findOne({
               userId: empId,
-              date: currentDateStr
+              date: currentDateStr,
             }).lean();
             if (att && att.checkInTime && !att.checkOutTime) {
               checkedInRecipientIds.push(empId);
@@ -506,17 +641,24 @@ export default fp(async (fastify, _opts) => {
 
           if (checkedInRecipientIds.length > 0) {
             const advice = await getCheckoutAdvice();
-            console.log(`[Cron] Sending WORK_END_REMINDER to ${checkedInRecipientIds.length} employees of ${org.name}`);
-            await notifyUsers(checkedInRecipientIds, 'WORK_END_REMINDER', {
-              message: `Office wraps up in 15 minutes (${org.workEndTime || '18:00'}).\n${advice}\nDon't forget to check out! 💼`
-            }, false);
+            console.log(
+              `[Cron] Sending WORK_END_REMINDER to ${checkedInRecipientIds.length} employees of ${org.name}`,
+            );
+            await notifyUsers(
+              checkedInRecipientIds,
+              "WORK_END_REMINDER",
+              {
+                message: `Office wraps up in 15 minutes (${org.workEndTime || "18:00"}).\n${advice}\nDon't forget to check out! 💼`,
+              },
+              false,
+            );
           }
         } else if (isLateCheckin) {
           const lateRecipientIds: string[] = [];
           for (const empId of eligibleEmployees) {
             const att = await Attendance.findOne({
               userId: empId,
-              date: currentDateStr
+              date: currentDateStr,
             }).lean();
 
             if (!att || !att.checkInTime) {
@@ -530,20 +672,30 @@ export default fp(async (fastify, _opts) => {
               "Running a bit behind schedule? Don't forget to mark your attendance! 🏃‍♂️",
               "Good morning! We noticed you haven't checked in yet. Are you on your way? 🚗",
               "Time is ticking! Let us know you're here by checking in. ⏱️",
-              "Hello! Just a reminder to check in and register your start of day. 📅"
+              "Hello! Just a reminder to check in and register your start of day. 📅",
             ];
-            const randomMsg = lateMessagesList[Math.floor(Math.random() * lateMessagesList.length)];
-            console.log(`[Cron] Sending LATE_CHECKIN_WARNING to ${lateRecipientIds.length} employees of ${org.name}`);
-            await notifyUsers(lateRecipientIds, 'LATE_CHECKIN_WARNING', {
-              message: randomMsg
-            }, false);
+            const randomMsg =
+              lateMessagesList[
+                Math.floor(Math.random() * lateMessagesList.length)
+              ];
+            console.log(
+              `[Cron] Sending LATE_CHECKIN_WARNING to ${lateRecipientIds.length} employees of ${org.name}`,
+            );
+            await notifyUsers(
+              lateRecipientIds,
+              "LATE_CHECKIN_WARNING",
+              {
+                message: randomMsg,
+              },
+              false,
+            );
           }
         } else if (isForgotCheckout) {
           const forgotRecipientIds: string[] = [];
           for (const empId of eligibleEmployees) {
             const att = await Attendance.findOne({
               userId: empId,
-              date: currentDateStr
+              date: currentDateStr,
             }).lean();
 
             if (att && att.checkInTime && !att.checkOutTime) {
@@ -557,77 +709,122 @@ export default fp(async (fastify, _opts) => {
               "Still at the office? Remember to check out for the day! 🌅",
               "Time to head home! Make sure to mark your checkout. 🏠",
               "Don't forget to wrap up your day and checkout. Rest well! 🛋️",
-              "Are you done for the day? Please complete your check out. 🚪"
+              "Are you done for the day? Please complete your check out. 🚪",
             ];
-            const randomMsg = checkoutMessagesList[Math.floor(Math.random() * checkoutMessagesList.length)];
-            console.log(`[Cron] Sending FORGOT_CHECKOUT_WARNING to ${forgotRecipientIds.length} employees of ${org.name}`);
-            await notifyUsers(forgotRecipientIds, 'FORGOT_CHECKOUT_WARNING', {
-              message: randomMsg
-            }, false);
+            const randomMsg =
+              checkoutMessagesList[
+                Math.floor(Math.random() * checkoutMessagesList.length)
+              ];
+            console.log(
+              `[Cron] Sending FORGOT_CHECKOUT_WARNING to ${forgotRecipientIds.length} employees of ${org.name}`,
+            );
+            await notifyUsers(
+              forgotRecipientIds,
+              "FORGOT_CHECKOUT_WARNING",
+              {
+                message: randomMsg,
+              },
+              false,
+            );
           }
         }
       }
     } catch (err) {
-      console.error('[Cron] Workday reminder job failed:', err);
+      console.error("[Cron] Workday reminder job failed:", err);
     }
   });
 
   // ─── TESTING CRON JOB: Runs every minute and sends all 5 workday notifications to all active employees ───
-  // cron.schedule('* * * * *', async () => {
-  //   console.log('[Cron Test] Running workday notifications test job...');
+  // cron.schedule("* * * * *", async () => {
+  //   console.log("[Cron Test] Running workday notifications test job...");
   //   try {
-  //     const employees = await User.find({ role: 'EMPLOYEE', status: 'ACTIVE' }).select('_id').lean();
-  //     const recipientIds = employees.map(emp => emp._id.toString());
+  //     const employees = await User.find({ role: "ADMIN", status: "ACTIVE" })
+  //       .select("_id")
+  //       .lean();
+  //     const recipientIds = employees.map((emp) => emp._id.toString());
   //     if (recipientIds.length === 0) {
-  //       console.log('[Cron Test] No active employees found to send test notifications.');
+  //       console.log(
+  //         "[Cron Test] No active employees found to send test notifications.",
+  //       );
   //       return;
   //     }
 
-  //     console.log(`[Cron Test] Sending test notifications to ${recipientIds.length} employees...`);
+  //     console.log(
+  //       `[Cron Test] Sending test notifications to ${recipientIds.length} employees...`,
+  //     );
 
   //     // 1. Start Reminder
   //     const quote = await getMotivationalQuote();
-  //     await notifyUsers(recipientIds, 'WORK_START_REMINDER', {
-  //       message: `[TEST] Good morning! ☕ Office starts in 30 minutes.\n${quote}`
-  //     }, false);
+  //     await notifyUsers(
+  //       recipientIds,
+  //       "WORK_START_REMINDER",
+  //       {
+  //         message: `[TEST] Good morning! ☕ Office starts in 30 minutes.\n${quote}`,
+  //       },
+  //       false,
+  //     );
 
   //     // 2. Lunch Break
   //     const lunchAdvice = await getLunchAdvice();
-  //     await notifyUsers(recipientIds, 'LUNCH_BREAK_REMINDER', {
-  //       message: `[TEST] Lunch break time! 🍔\n${lunchAdvice}\n🍕🥤🌮`
-  //     }, false);
+  //     await notifyUsers(
+  //       recipientIds,
+  //       "LUNCH_BREAK_REMINDER",
+  //       {
+  //         message: `[TEST] Lunch break time! 🍔\n${lunchAdvice}\n🍕🥤🌮`,
+  //       },
+  //       false,
+  //     );
 
   //     // 3. End Reminder
   //     const checkoutAdvice = await getCheckoutAdvice();
-  //     await notifyUsers(recipientIds, 'WORK_END_REMINDER', {
-  //       message: `[TEST] Office wraps up in 15 minutes. 🌅\n${checkoutAdvice}\nDon't forget to check out! 💼`
-  //     }, false);
+  //     await notifyUsers(
+  //       recipientIds,
+  //       "WORK_END_REMINDER",
+  //       {
+  //         message: `[TEST] Office wraps up in 15 minutes. 🌅\n${checkoutAdvice}\nDon't forget to check out! 💼`,
+  //       },
+  //       false,
+  //     );
 
   //     // 4. Late Check-in
   //     const lateMessagesList = [
   //       "Oh, seems like you are late today! Did you forget to check in? ⏰",
   //       "Running a bit behind schedule? Don't forget to mark your attendance! 🏃‍♂️",
-  //       "Good morning! We noticed you haven't checked in yet. Are you on your way? 🚗"
+  //       "Good morning! We noticed you haven't checked in yet. Are you on your way? 🚗",
   //     ];
-  //     await notifyUsers(recipientIds, 'LATE_CHECKIN_WARNING', {
-  //       message: `[TEST] ${lateMessagesList[Math.floor(Math.random() * lateMessagesList.length)]}`
-  //     }, false);
+  //     await notifyUsers(
+  //       recipientIds,
+  //       "LATE_CHECKIN_WARNING",
+  //       {
+  //         message: `[TEST] ${lateMessagesList[Math.floor(Math.random() * lateMessagesList.length)]}`,
+  //       },
+  //       false,
+  //     );
 
   //     // 5. Forgot Checkout
   //     const checkoutMessagesList = [
   //       "Working late? Or did you forget to check out? 🏢",
   //       "Still at the office? Remember to check out for the day! 🌅",
-  //       "Time to head home! Make sure to mark your checkout. 🏠"
+  //       "Time to head home! Make sure to mark your checkout. 🏠",
   //     ];
-  //     await notifyUsers(recipientIds, 'FORGOT_CHECKOUT_WARNING', {
-  //       message: `[TEST] ${checkoutMessagesList[Math.floor(Math.random() * checkoutMessagesList.length)]}`
-  //     }, false);
+  //     await notifyUsers(
+  //       recipientIds,
+  //       "FORGOT_CHECKOUT_WARNING",
+  //       {
+  //         message: `[TEST] ${checkoutMessagesList[Math.floor(Math.random() * checkoutMessagesList.length)]}`,
+  //       },
+  //       false,
+  //     );
 
-  //     console.log('[Cron Test] Sent all 5 workday test notifications successfully.');
+  //     console.log(
+  //       "[Cron Test] Sent all 5 workday test notifications successfully.",
+  //     );
   //   } catch (err) {
-  //     console.error('[Cron Test] Failed to send test notifications:', err);
+  //     console.error("[Cron Test] Failed to send test notifications:", err);
   //   }
   // });
 
-  console.log('[Cron] Scheduled: Daily report at 11:30 AM, Monthly report on 1st at 12:30 PM, workday reminders, test cron job.');
+  console.log(
+    "[Cron] Scheduled: Daily report at 11:30 AM, Monthly report on 1st at 12:30 PM, workday reminders, test cron job.",
+  );
 });

@@ -94,7 +94,11 @@ const tdStyle = `
   padding: 8px;
 `;
 
-export function getTaskAssignedTemplate(employeeName: string, adminName: string, taskTitle: string): string {
+export function getTaskAssignedTemplate(
+  employeeName: string,
+  adminName: string,
+  taskTitle: string,
+): string {
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
@@ -108,8 +112,8 @@ export function getTaskAssignedTemplate(employeeName: string, adminName: string,
         </div>
         <p>Click the buttons below to open the app and start working on it:</p>
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://tasks" style="${buttonStyle}">Open My Tasks</a>
-          <a href="empapp://home" style="${secondaryButtonStyle}">Go to Dashboard</a>
+          <a href="aline://tasks" style="${buttonStyle}">Open My Tasks</a>
+          <a href="aline://home" style="${secondaryButtonStyle}">Go to Dashboard</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -124,10 +128,14 @@ export function getProjectAssignedTemplate(
   adminName: string,
   projectName: string,
   projectDesc: string | undefined,
-  dueDate: string | undefined
+  dueDate: string | undefined,
 ): string {
-  const descHtml = projectDesc ? `<p><strong>Description:</strong> ${projectDesc}</p>` : '';
-  const dateHtml = dueDate ? `<p><strong>Due Date:</strong> ${dueDate}</p>` : '';
+  const descHtml = projectDesc
+    ? `<p><strong>Description:</strong> ${projectDesc}</p>`
+    : "";
+  const dateHtml = dueDate
+    ? `<p><strong>Due Date:</strong> ${dueDate}</p>`
+    : "";
 
   return `
     <div style="${emailContainerStyle}">
@@ -144,8 +152,8 @@ export function getProjectAssignedTemplate(
         </div>
         <p>Click the buttons below to view the project details in the app:</p>
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://projects" style="${buttonStyle}">Open Projects</a>
-          <a href="empapp://home" style="${secondaryButtonStyle}">Go to Dashboard</a>
+          <a href="aline://projects" style="${buttonStyle}">Open Projects</a>
+          <a href="aline://home" style="${secondaryButtonStyle}">Go to Dashboard</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -155,27 +163,33 @@ export function getProjectAssignedTemplate(
   `;
 }
 
-export function getDailyReportTemplate(date: string, orgName: string, records: IEmployeeDailyRecord[]): string {
-  let tableRowsHtml = '';
+export function getDailyReportTemplate(
+  date: string,
+  orgName: string,
+  records: IEmployeeDailyRecord[],
+): string {
+  let tableRowsHtml = "";
 
   if (records.length === 0) {
     tableRowsHtml = `<tr><td colspan="4" style="${tdStyle} text-align: center; color: #888888;">No employees in organization.</td></tr>`;
   } else {
     for (const rec of records) {
-      const completedList = rec.completedTasks.length > 0
-        ? `<ul style="margin: 0; padding-left: 16px;">${rec.completedTasks.map(t => `<li>${t}</li>`).join('')}</ul>`
-        : '<span style="color: #888888; font-size: 12px;">None</span>';
+      const completedList =
+        rec.completedTasks.length > 0
+          ? `<ul style="margin: 0; padding-left: 16px;">${rec.completedTasks.map((t) => `<li>${t}</li>`).join("")}</ul>`
+          : '<span style="color: #888888; font-size: 12px;">None</span>';
 
-      const pendingList = rec.pendingTasks.length > 0
-        ? `<ul style="margin: 0; padding-left: 16px;">${rec.pendingTasks.map(t => `<li>${t}</li>`).join('')}</ul>`
-        : '<span style="color: #888888; font-size: 12px;">None</span>';
+      const pendingList =
+        rec.pendingTasks.length > 0
+          ? `<ul style="margin: 0; padding-left: 16px;">${rec.pendingTasks.map((t) => `<li>${t}</li>`).join("")}</ul>`
+          : '<span style="color: #888888; font-size: 12px;">None</span>';
 
-      let attendanceStatus = '';
-      if (rec.status.startsWith('Present')) {
+      let attendanceStatus = "";
+      if (rec.status.startsWith("Present")) {
         attendanceStatus = `<span style="color: #2e7d32; font-weight: bold;">${rec.status}</span><br/><span style="font-size: 11px; color: #666666;">In: ${rec.checkIn}<br/>Out: ${rec.checkOut}</span>`;
-      } else if (rec.status.startsWith('On Leave')) {
+      } else if (rec.status.startsWith("On Leave")) {
         attendanceStatus = `<span style="color: #0058be; font-weight: bold;">${rec.status}</span>`;
-      } else if (rec.status === 'Holiday') {
+      } else if (rec.status === "Holiday") {
         attendanceStatus = `<span style="color: #e65100; font-weight: bold;">Holiday</span>`;
       } else {
         attendanceStatus = `<span style="color: #c62828; font-weight: bold;">Absent</span>`;
@@ -223,8 +237,12 @@ export function getDailyReportTemplate(date: string, orgName: string, records: I
   `;
 }
 
-export function getMonthlyReportTemplate(monthName: string, orgName: string, records: IEmployeeMonthlyRecord[]): string {
-  let tableRowsHtml = '';
+export function getMonthlyReportTemplate(
+  monthName: string,
+  orgName: string,
+  records: IEmployeeMonthlyRecord[],
+): string {
+  let tableRowsHtml = "";
 
   if (records.length === 0) {
     tableRowsHtml = `<tr><td colspan="4" style="${tdStyle} text-align: center; color: #888888;">No employees in organization.</td></tr>`;
@@ -238,7 +256,7 @@ export function getMonthlyReportTemplate(monthName: string, orgName: string, rec
             <br/>
             <span style="font-size: 11px; color: #666666;">Present: ${rec.presentDays}/${rec.totalDays} days</span>
           </td>
-          <td style="${tdStyle}; font-weight: bold; color: #0058be;">${rec.leaveDaysTaken} day${rec.leaveDaysTaken !== 1 ? 's' : ''}</td>
+          <td style="${tdStyle}; font-weight: bold; color: #0058be;">${rec.leaveDaysTaken} day${rec.leaveDaysTaken !== 1 ? "s" : ""}</td>
           <td style="${tdStyle}; color: #2e7d32; font-weight: bold;">${rec.completedTasksCount}</td>
           <td style="${tdStyle}; color: #e65100; font-weight: bold;">${rec.pendingTasksCount}</td>
         </tr>
@@ -278,7 +296,12 @@ export function getMonthlyReportTemplate(monthName: string, orgName: string, rec
   `;
 }
 
-export function getSampleCollectionOTPTemplate(purpose: string, sampleType: string, otp: string, employeeName: string): string {
+export function getSampleCollectionOTPTemplate(
+  purpose: string,
+  sampleType: string,
+  otp: string,
+  employeeName: string,
+): string {
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
@@ -306,15 +329,19 @@ export function getSampleCollectionOTPTemplate(purpose: string, sampleType: stri
   `;
 }
 
-export function getAdminWelcomeTemplate(adminName: string, orgName: string, orgCode: string): string {
+export function getAdminWelcomeTemplate(
+  adminName: string,
+  orgName: string,
+  orgCode: string,
+): string {
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
-        <h1 style="margin: 0; font-size: 24px;">Welcome to Cluix!</h1>
+        <h1 style="margin: 0; font-size: 24px;">Welcome to ALine!</h1>
       </div>
       <div style="${emailBodyStyle}">
         <p>Hi <strong>${adminName}</strong>,</p>
-        <p>Thank you for registering with Cluix! Your organization, <strong>${orgName}</strong>, has been successfully created.</p>
+        <p>Thank you for registering with ALine! Your organization, <strong>${orgName}</strong>, has been successfully created.</p>
         
         <p>To invite your team members and employees to join your organization, please share the following unique <strong>Organization Code</strong> with them:</p>
         
@@ -327,21 +354,24 @@ export function getAdminWelcomeTemplate(adminName: string, orgName: string, orgC
         <p>Your employees will need to enter this code when signing up so they are correctly linked to your organization.</p>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://home" style="${buttonStyle}">Go to Admin Dashboard</a>
+          <a href="aline://home" style="${buttonStyle}">Go to Admin Dashboard</a>
         </div>
       </div>
       <div style="${footerStyle}">
-        Thank you for choosing Cluix. If you have any questions, please contact our support team.
+        Thank you for choosing ALine. If you have any questions, please contact our support team.
       </div>
     </div>
   `;
 }
 
-export function getEmployeeWelcomeTemplate(employeeName: string, orgName: string): string {
+export function getEmployeeWelcomeTemplate(
+  employeeName: string,
+  orgName: string,
+): string {
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
-        <h1 style="margin: 0; font-size: 24px;">Welcome to Cluix!</h1>
+        <h1 style="margin: 0; font-size: 24px;">Welcome to ALine!</h1>
       </div>
       <div style="${emailBodyStyle}">
         <p>Hi <strong>${employeeName}</strong>,</p>
@@ -350,7 +380,7 @@ export function getEmployeeWelcomeTemplate(employeeName: string, orgName: string
         <p>You can now log in using the mobile app to check your attendance, manage tasks assigned by your admin, log reimbursements, and more.</p>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://home" style="${buttonStyle}">Open Employee App</a>
+          <a href="aline://home" style="${buttonStyle}">Open Employee App</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -360,7 +390,12 @@ export function getEmployeeWelcomeTemplate(employeeName: string, orgName: string
   `;
 }
 
-export function getEmployeeJoinedAdminTemplate(adminName: string, employeeName: string, employeeEmail: string, orgCode: string): string {
+export function getEmployeeJoinedAdminTemplate(
+  adminName: string,
+  employeeName: string,
+  employeeEmail: string,
+  orgCode: string,
+): string {
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
@@ -379,11 +414,11 @@ export function getEmployeeJoinedAdminTemplate(adminName: string, employeeName: 
         <p>You can manage their details, assign tasks, and view their attendance history directly from the Admin Dashboard.</p>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://employees" style="${buttonStyle}">Manage Employees</a>
+          <a href="aline://employees" style="${buttonStyle}">Manage Employees</a>
         </div>
       </div>
       <div style="${footerStyle}">
-        This is an automated notification from Cluix Admin Services.
+        This is an automated notification from ALine Admin Services.
       </div>
     </div>
   `;
@@ -394,7 +429,7 @@ export function getClaimSubmittedAdminTemplate(
   employeeName: string,
   claimTitle: string,
   amount: number,
-  refNum: string
+  refNum: string,
 ): string {
   return `
     <div style="${emailContainerStyle}">
@@ -414,11 +449,11 @@ export function getClaimSubmittedAdminTemplate(
         <p>Please review and approve/reject this claim in the admin panel.</p>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://reimbursements" style="${buttonStyle}">Review Claims</a>
+          <a href="aline://reimbursements" style="${buttonStyle}">Review Claims</a>
         </div>
       </div>
       <div style="${footerStyle}">
-        This is an automated notification from Cluix Admin Services.
+        This is an automated notification from ALine Admin Services.
       </div>
     </div>
   `;
@@ -429,11 +464,13 @@ export function getClaimReviewedEmployeeTemplate(
   status: string,
   claimTitle: string,
   amount: number,
-  adminNote: string | undefined
+  adminNote: string | undefined,
 ): string {
-  const statusColor = status === 'approved' ? '#2e7d32' : '#c62828';
+  const statusColor = status === "approved" ? "#2e7d32" : "#c62828";
   const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-  const noteHtml = adminNote ? `<p style="margin: 8px 0 0 0;"><strong>Admin Note:</strong> ${adminNote}</p>` : '';
+  const noteHtml = adminNote
+    ? `<p style="margin: 8px 0 0 0;"><strong>Admin Note:</strong> ${adminNote}</p>`
+    : "";
 
   return `
     <div style="${emailContainerStyle}">
@@ -452,7 +489,7 @@ export function getClaimReviewedEmployeeTemplate(
         </div>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://reimbursements" style="${buttonStyle}">View Claim Details</a>
+          <a href="aline://reimbursements" style="${buttonStyle}">View Claim Details</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -467,9 +504,11 @@ export function getClaimCommentTemplate(
   commenterName: string,
   claimTitle: string,
   commentText: string,
-  isReply: boolean
+  isReply: boolean,
 ): string {
-  const subjectText = isReply ? `New reply on claim discussion` : `New comment on claim discussion`;
+  const subjectText = isReply
+    ? `New reply on claim discussion`
+    : `New comment on claim discussion`;
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
@@ -484,7 +523,7 @@ export function getClaimCommentTemplate(
         </div>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://reimbursements" style="${buttonStyle}">View Claim Discussion</a>
+          <a href="aline://reimbursements" style="${buttonStyle}">View Claim Discussion</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -499,9 +538,11 @@ export function getProjectCommentTemplate(
   commenterName: string,
   projectName: string,
   commentText: string,
-  isReply: boolean
+  isReply: boolean,
 ): string {
-  const subjectText = isReply ? `New reply on project discussion` : `New comment on project discussion`;
+  const subjectText = isReply
+    ? `New reply on project discussion`
+    : `New comment on project discussion`;
   return `
     <div style="${emailContainerStyle}">
       <div style="${emailHeaderStyle}">
@@ -516,7 +557,7 @@ export function getProjectCommentTemplate(
         </div>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://projects" style="${buttonStyle}">View Project Discussion</a>
+          <a href="aline://projects" style="${buttonStyle}">View Project Discussion</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -533,7 +574,7 @@ export function getLeaveSubmittedAdminTemplate(
   startDate: string,
   endDate: string,
   dayCount: number,
-  reason: string
+  reason: string,
 ): string {
   return `
     <div style="${emailContainerStyle}">
@@ -546,18 +587,18 @@ export function getLeaveSubmittedAdminTemplate(
         
         <div style="background-color: #f9f9f9; border-left: 4px solid #208AEF; padding: 16px; margin: 16px 0;">
           <p style="margin: 0 0 8px 0;"><strong>Leave Type:</strong> ${leaveType}</p>
-          <p style="margin: 0 0 8px 0;"><strong>Duration:</strong> ${startDate} to ${endDate} (${dayCount} day${dayCount > 1 ? 's' : ''})</p>
+          <p style="margin: 0 0 8px 0;"><strong>Duration:</strong> ${startDate} to ${endDate} (${dayCount} day${dayCount > 1 ? "s" : ""})</p>
           <p style="margin: 0;"><strong>Reason:</strong> ${reason}</p>
         </div>
         
         <p>Please review and approve/reject this request in the admin panel.</p>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://leaves" style="${buttonStyle}">Review Leaves</a>
+          <a href="aline://leaves" style="${buttonStyle}">Review Leaves</a>
         </div>
       </div>
       <div style="${footerStyle}">
-        This is an automated notification from Cluix Admin Services.
+        This is an automated notification from ALine Admin Services.
       </div>
     </div>
   `;
@@ -570,11 +611,13 @@ export function getLeaveReviewedEmployeeTemplate(
   startDate: string,
   endDate: string,
   dayCount: number,
-  adminComment?: string
+  adminComment?: string,
 ): string {
-  const statusColor = status === 'approved' ? '#2e7d32' : '#c62828';
+  const statusColor = status === "approved" ? "#2e7d32" : "#c62828";
   const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-  const commentHtml = adminComment ? `<p style="margin: 8px 0 0 0;"><strong>Admin Comment:</strong> ${adminComment}</p>` : '';
+  const commentHtml = adminComment
+    ? `<p style="margin: 8px 0 0 0;"><strong>Admin Comment:</strong> ${adminComment}</p>`
+    : "";
 
   return `
     <div style="${emailContainerStyle}">
@@ -587,13 +630,13 @@ export function getLeaveReviewedEmployeeTemplate(
         
         <div style="background-color: #f9f9f9; border-left: 4px solid ${statusColor}; padding: 16px; margin: 16px 0;">
           <p style="margin: 0 0 8px 0;"><strong>Leave Type:</strong> ${leaveType}</p>
-          <p style="margin: 0 0 8px 0;"><strong>Duration:</strong> ${startDate} to ${endDate} (${dayCount} day${dayCount > 1 ? 's' : ''})</p>
+          <p style="margin: 0 0 8px 0;"><strong>Duration:</strong> ${startDate} to ${endDate} (${dayCount} day${dayCount > 1 ? "s" : ""})</p>
           <p style="margin: 0 0 8px 0;"><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span></p>
           ${commentHtml}
         </div>
         
         <div style="text-align: center; margin-top: 24px;">
-          <a href="empapp://leaves" style="${buttonStyle}">View Leave Details</a>
+          <a href="aline://leaves" style="${buttonStyle}">View Leave Details</a>
         </div>
       </div>
       <div style="${footerStyle}">
@@ -602,5 +645,3 @@ export function getLeaveReviewedEmployeeTemplate(
     </div>
   `;
 }
-
-
